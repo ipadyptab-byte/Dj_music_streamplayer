@@ -694,7 +694,7 @@
                 if (!intervalSong) {
                     isIntervalPlaying = false;
                     if (wasPlaying) {
-                        mainPlayer.play().catch(() =&gt; {});
+                        mainPlayer.play().catch(() => {});
                     }
                     if (currentTrackEl) currentTrackEl.innerText = originalTitle;
                     return;
@@ -709,7 +709,7 @@
                 if (!audioUrl) {
                     isIntervalPlaying = false;
                     if (wasPlaying) {
-                        mainPlayer.play().catch(() =&gt; {});
+                        mainPlayer.play().catch(() => {});
                     }
                     if (currentTrackEl) currentTrackEl.innerText = originalTitle;
                     return;
@@ -717,18 +717,18 @@
 
                 const intervalAudio = new Audio(audioUrl);
 
-                const cleanup = () =&gt; {
+                const cleanup = () => {
                     isIntervalPlaying = false;
                     intervalAudio.pause();
                     intervalAudio.src = '';
                     if (wasPlaying) {
-                        mainPlayer.play().catch(() =&gt; {});
+                        mainPlayer.play().catch(() => {});
                     }
                     if (currentTrackEl) currentTrackEl.innerText = originalTitle;
                 };
                 intervalAudio.onended = cleanup;
-                intervalAudio.ontimeupdate = () =&gt; {
-                    if (intervalAudio.duration &gt; 0 &amp;&amp; intervalAudio.currentTime &gt;= intervalAudio.duration) {
+                intervalAudio.ontimeupdate = () => {
+                    if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
                         intervalAudio.ontimeupdate = null;
                         cleanup();
                     }
@@ -737,7 +737,7 @@
             } catch (error) {
                 isIntervalPlaying = false;
                 if (wasPlaying) {
-                    mainPlayer.play().catch(() =&gt; {});
+                    mainPlayer.play().catch(() => {});
                 }
                 if (currentTrackEl) currentTrackEl.innerText = originalTitle;
             }
