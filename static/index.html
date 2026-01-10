@@ -92,11 +92,15 @@
             Loading saved files...
         </div>
         <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
-           <cbutton onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
+            <button onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
                 Save Schedule
-          </  button    <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954;"></span>
+            </button>
+            <button onclick="clearScheduleTracks()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #e74c3c; color: white; border: none; cursor: pointer;">
+                Clear Schedule (Delete All)
+            </button>
+            <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954; flex: 1; text-align: right;"></span>
         </div>
-        </div>
+    </div>
 
     <div class="results" id="results"></div>
 
@@ -106,9 +110,13 @@
     </div>
 
     <script>
-        // Per-track schedule configuration
         let scheduleConfigs = [];
-        const lastScheduleTriggers = {}; // { url: 'YYYY-MM-DD HH:MM' }
+        const lastScheduleTriggers = {};
+        let intervalSong = null;
+        let intervalTimer = null;
+        let isIntervalPlaying = false;
+        let scheduleSong = null;
+        let searchResults = [];
 
         function loadScheduleConfigs() {
             try {
@@ -118,8 +126,6 @@
             }
         }
 
-        
-
         function saveScheduleConfigs(showMessage = false) {
             localStorage.setItem('scheduleConfigs', JSON.stringify(scheduleConfigs));
             if (showMessage) {
@@ -127,16 +133,12 @@
                 if (el) {
                     el.innerText = 'Schedule saved';
                     el.style.color = '#1db954';
-                    setTimeout(() => {
-                        el.innerText = '';
-                    }, 3000);
+                    setTimeout(() => { el.innerText = ''; }, 3000);
                 }
             }
         }
 
-        // Initialize clock and state on load
         window.onload = () => {
-            // Clock
             setInterval(() => {
                 const clock = document.getElementById('current-clock');
                 if (clock) {
@@ -147,30 +149,25 @@
 
             loadScheduleConfigs();
 
-            // Restore global schedule enabled flag
             const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
             if (savedScheduleEnabled !== null) {
                 const chk = document.getElementById('schedule-enabled');
-                if (chk) chk.checked = savedScheduleEnabled === 'true';
+                if (chk) chk.checked = (savedScheduleEnabled === 'true');
             }
 
-            startScheduleChecker();
-            startIntervalTimer();
-            loadSavedFiles();
-            
-            // Restore from localStorage
             const savedInterval = localStorage.getItem('intervalSong');
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
-                document.getElementById('interval-status').innerText = 'Restored: ' + intervalSong.title;
+                const el = document.getElementById('interval-status');
+                if (el) el.innerText = 'Restored: ' + intervalSong.title;
             }
             const savedSchedule = localStorage.getItem('scheduleSong');
             if (savedSchedule) {
                 scheduleSong = JSON.parse(savedSchedule);
-                document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
+                const el = document.getElementById('schedule-status');
+                if (el) el.innerText = 'Restored: ' + scheduleSong.title;
             }
 
-            // Restore time for selected track schedule
             const savedSongTime = localStorage.getItem('scheduleSongTime');
             const timeInput = document.getElementById('schedule-song-time');
             if (timeInput && savedSongTime) {
@@ -182,13 +179,16 @@
                 });
             }
 
-            // Persist schedule-enabled checkbox changes
             const scheduleEnableEl = document.getElementById('schedule-enabled');
             if (scheduleEnableEl) {
                 scheduleEnableEl.addEventListener('change', (e) => {
                     localStorage.setItem('scheduleEnabled', e.target.checked ? 'true' : 'false');
                 });
             }
+
+            startScheduleChecker();
+            startIntervalTimer();
+            loadSavedFiles();
         };
 
         async function loadSavedFiles() {
@@ -199,7 +199,6 @@
                 ]);
                 const intervalFiles = await intervalRes.json();
                 const scheduleFiles = await scheduleRes.json();
-
                 renderIntervalFilesList(intervalFiles);
                 renderScheduleFilesList(scheduleFiles);
             } catch (error) {
@@ -207,30 +206,13 @@
             }
         }
 
-        // Interval list: shows files stored in the interval folder.
-        // Delete ALL schedule audio files (used by "Clear Schedule (Delete All)" button)
-        async function clearScheduleTracks() {
-            if (!confirm('Delete ALL schedule audio files from disk? Interval files will not be touched.')) {
+        function renderIntervalFilesList(files) {
+            const container = document.getElementById('interval-files-list');
+            if (!container) return;
+            if (!files || files.length === 0) {
+                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No interval tracks in list.</div>';
                 return;
             }
-            try {
-                const response = await fetch('/api/files?type=schedule');
-                const files = await response.json();
-                for (const file of files) {
-                    await fetch('/api/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filename: file.title, type: 'schedule' })
-                    });
-                }
-                scheduleConfigs = [];
-                saveScheduleConfigs();
-                loadSavedFiles();
-            } catch (error) {
-                console.error('Error clearing schedule tracks:', error);
-            }
-        }
-
             container.innerHTML = '';
             files.forEach(file => {
                 const div = document.createElement('div');
@@ -239,13 +221,13 @@
                 div.style.alignItems = 'center';
                 div.style.marginBottom = '5px';
                 div.style.fontSize = '0.85em';
-                
+
                 const nameSpan = document.createElement('span');
                 nameSpan.innerText = file.title;
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
                 nameSpan.onclick = () => selectSavedFile(file, 'interval');
-                
+
                 const deleteBtn = document.createElement('button');
                 deleteBtn.innerText = '🗑️';
                 deleteBtn.style.padding = '2px 5px';
@@ -261,71 +243,39 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ filename: file.title, type: 'interval' })
                         });
+                        const savedInterval = localStorage.getItem('intervalSong');
+                        if (savedInterval) {
+                            const s = JSON.parse(savedInterval);
+                            if (s.title === file.title) {
+                                localStorage.removeItem('intervalSong');
+                                intervalSong = null;
+                                const el = document.getElementById('interval-status');
+                                if (el) el.innerText = '';
+                            }
+                        }
                         loadSavedFiles();
                     } catch (err) {
                         console.error('Error deleting interval file:', err);
                     }
                 };
-                
+
                 div.appendChild(nameSpan);
                 div.appendChild(deleteBtn);
                 container.appendChild(div);
             });
         }
 
-            container.innerHTML = '';
-            shownFiles.forEach(file => {
-                const div = document.createElement('div');
-                div.style.display = 'flex';
-                div.style.justifyContent = 'space-between';
-                div.style.alignItems = 'center';
-                div.style.marginBottom = '5px';
-                div.style.fontSize = '0.85em';
-                
-                const nameSpan = document.createElement('span');
-                nameSpan.innerText = file.title;
-                nameSpan.style.cursor = 'pointer';
-                nameSpan.style.flex = '1';
-                nameSpan.onclick = () => selectSavedFile(file, 'interval');
-                
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerText = '✖';
-                deleteBtn.style.padding = '2px 5px';
-                deleteBtn.style.background = 'transparent';
-                deleteBtn.style.border = 'none';
-                deleteBtn.style.cursor = 'pointer';
-                deleteBtn.title = 'Remove from interval list (file stays available)';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    // If this file is currently the active intervalSong, clear it
-                    if (intervalSong && intervalSong.title === file.title) {
-                        intervalSong = null;
-                        localStorage.removeItem('intervalSong');
-                        const statusEl = document.getElementById('interval-status');
-                        if (statusEl) statusEl.innerText = '';
-                    }
-                    removeIntervalEntry(file.title);
-                };
-                
-                div.appendChild(nameSpan);
-                div.appendChild(deleteBtn);
-                container.appendChild(div);
-            });
-        }
-
-        // Schedule list: time and enable per track
         function renderScheduleFilesList(files) {
             const container = document.getElementById('schedule-files-list');
             if (!container) return;
 
-            if (files.length === 0) {
+            if (!files || files.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
                 scheduleConfigs = [];
                 saveScheduleConfigs();
                 return;
             }
 
-            // Ensure every file has a config
             files.forEach(file => {
                 const existing = scheduleConfigs.find(c => c.title === file.title && c.url === file.url);
                 if (!existing) {
@@ -334,12 +284,11 @@
                         url: file.url,
                         isLocal: true,
                         enabled: true,
-                        time: '' // user will set
+                        time: ''
                     });
                 }
             });
 
-            // Remove configs for files that no longer exist
             const titles = new Set(files.map(f => f.title + '|' + f.url));
             scheduleConfigs = scheduleConfigs.filter(c => titles.has(c.title + '|' + c.url));
             saveScheduleConfigs();
@@ -367,14 +316,14 @@
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
                 nameSpan.onclick = () => {
-                    // Select for manual Play button
                     scheduleSong = {
                         title: config.title,
                         url: config.url,
                         isLocal: config.isLocal
                     };
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                    document.getElementById('schedule-status').innerText = 'Selected: ' + config.title;
+                    const el = document.getElementById('schedule-status');
+                    if (el) el.innerText = 'Selected: ' + config.title;
                 };
 
                 const timeInput = document.createElement('input');
@@ -421,6 +370,28 @@
             });
         }
 
+        async function clearScheduleTracks() {
+            if (!confirm('Delete ALL schedule audio files from disk? Interval files will not be touched.')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/files?type=schedule');
+                const files = await response.json();
+                for (const file of files) {
+                    await fetch('/api/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: file.title, type: 'schedule' })
+                    });
+                }
+                scheduleConfigs = [];
+                saveScheduleConfigs();
+                loadSavedFiles();
+            } catch (error) {
+                console.error('Error clearing schedule tracks:', error);
+            }
+        }
+
         function selectSavedFile(file, type) {
             const songData = {
                 title: file.title,
@@ -430,29 +401,22 @@
             if (type === 'interval') {
                 intervalSong = songData;
                 localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                document.getElementById('interval-status').innerText = 'Selected: ' + file.title;
+                const el = document.getElementById('interval-status');
+                if (el) el.innerText = 'Selected: ' + file.title;
             } else {
                 scheduleSong = songData;
                 localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                document.getElementById('schedule-status').innerText = 'Selected: ' + file.title;
+                const el = document.getElementById('schedule-status');
+                if (el) el.innerText = 'Selected: ' + file.title;
             }
         }
-
-        let intervalSong = null;
-        let intervalAudio = null;
-        let scheduleAudio = null;
-        let intervalTimer = null;
-        let isIntervalPlaying = false;
-        let mainTrackPausedTime = 0;
-        let scheduleSong = null;
-        let scheduleChecker = null;
 
         async function searchSchedule() {
             const query = document.getElementById('schedule-query').value;
             if (!query) return;
             const status = document.getElementById('schedule-status');
-            status.innerText = 'Searching for scheduled song...';
-            
+            if (status) status.innerText = 'Searching for scheduled song...';
+
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const results = await response.json();
@@ -460,31 +424,29 @@
                     scheduleSong = results[0];
                     scheduleSong.isLocal = false;
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                    status.innerText = 'Scheduled song set: ' + scheduleSong.title;
-                    startScheduleChecker();
+                    if (status) status.innerText = 'Scheduled song set: ' + scheduleSong.title;
                 } else {
-                    status.innerText = 'No songs found for schedule.';
+                    if (status) status.innerText = 'No songs found for schedule.';
                 }
             } catch (error) {
-                status.innerText = 'Error setting scheduled song.';
+                if (status) status.innerText = 'Error setting scheduled song.';
             }
         }
 
         async function uploadScheduleFile() {
             const fileInput = document.getElementById('schedule-file');
-            if (fileInput.files.length === 0) {
+            if (!fileInput || fileInput.files.length === 0) {
                 alert('Please select a file first.');
                 return;
             }
-            
             const status = document.getElementById('schedule-status');
-            status.innerText = 'Uploading...';
-            status.style.color = '#1db954';
-            console.log('Starting upload for file:', fileInput.files[0].name);
-            
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            
             try {
                 const response = await fetch('/api/upload?type=schedule', {
                     method: 'POST',
@@ -496,7 +458,6 @@
                     throw new Error('Upload failed (server error)');
                 }
                 const data = await response.json();
-                console.log('Upload successful:', data);
                 if (data.url) {
                     scheduleSong = {
                         title: data.title,
@@ -504,74 +465,53 @@
                         isLocal: true
                     };
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                    status.innerText = '✅ File uploaded and set: ' + data.title;
-                    status.style.color = '#1db954';
-
-                    // Ensure this uploaded file has a schedule config entry
-                    loadScheduleConfigs();
-                    const existing = scheduleConfigs.find(c => c.title === data.title && c.url === data.url);
-                    if (!existing) {
-                        scheduleConfigs.push({
-                            title: data.title,
-                            url: data.url,
-                            isLocal: true,
-                            enabled: true,
-                            time: '' // user can set a time next to the track
-                        });
-                        saveScheduleConfigs();
+                    if (status) {
+                        status.innerText = '✅ File uploaded and set: ' + data.title;
+                        status.style.color = '#1db954';
                     }
-
                     loadSavedFiles();
-                    startScheduleChecker();
                 }
             } catch (error) {
                 console.error('Upload error details:', error);
-                status.innerText = '❌ Error: ' + error.message;
-                status.style.color = '#ff4444';
+                if (status) {
+                    status.innerText = '❌ Error: ' + error.message;
+                    status.style.color = '#ff4444';
+                }
                 alert('Upload failed. Please check the console for details.');
             }
         }
 
         function startScheduleChecker() {
-            function runChecker() {
-                const globalEnabled = document.getElementById('schedule-enabled').checked;
+            setInterval(() => {
+                const globalEnabled = document.getElementById('schedule-enabled')?.checked;
                 if (!globalEnabled) return;
+                if (!scheduleConfigs || scheduleConfigs.length === 0) return;
+
                 const now = new Date();
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+                const dateKey = now.toISOString().slice(0, 10);
 
-                // 1) Per-file schedules (uploaded files)
-                if (scheduleConfigs && scheduleConfigs.length > 0) {
-                    scheduleConfigs.forEach(config => {
-                        if (!config.enabled || !config.time || !config.url) return;
-                        if (config.time !== currentTime) return;
-                        if (isIntervalPlaying) return;
+                scheduleConfigs.forEach(config => {
+                    if (!config.enabled || !config.time || !config.url) return;
+                    if (config.time !== currentTime) return;
+                    if (isIntervalPlaying) return;
 
-                        const key = `${config.url}|${dateKey} ${currentTime}`;
-                        if (lastScheduleTriggers[key]) {
-                            // Already played this track for this minute today
-                            return;
-                        }
+                    const key = `${config.url}|${dateKey} ${currentTime}`;
+                    if (lastScheduleTriggers[key]) return;
 
-                        console.log('Triggering scheduled play at:', currentTime, 'for track:', config.title);
-                        lastScheduleTriggers[key] = true;
-
-                        playScheduleTrack({
-                            title: config.title,
-                            url: config.url,
-                            isLocal: config.isLocal
-                        });
+                    lastScheduleTriggers[key] = true;
+                    playScheduleTrack({
+                        title: config.title,
+                        url: config.url,
+                        isLocal: config.isLocal
                     });
-                }
+                });
 
-                // 2) Single selected track schedule (YouTube or uploaded)
                 const selectedTime = localStorage.getItem('scheduleSongTime');
                 if (scheduleSong && selectedTime && selectedTime === currentTime && !isIntervalPlaying) {
                     const keySel = `selected|${scheduleSong.url}|${dateKey} ${currentTime}`;
                     if (!lastScheduleTriggers[keySel]) {
-                        console.log('Triggering scheduled play for selected track at:', currentTime, 'title:', scheduleSong.title);
                         lastScheduleTriggers[keySel] = true;
-
                         playScheduleTrack({
                             title: scheduleSong.title,
                             url: scheduleSong.url,
@@ -579,13 +519,10 @@
                         });
                     }
                 }
-            }
-            setInterval(runChecker, 1000);
+            }, 1000);
         }
 
         async function playScheduleTrack(track = null) {
-            // If called without a specific track (e.g. from the Play button),
-            // use the currently selected scheduleSong, or the first enabled scheduled config.
             if (!track) {
                 if (scheduleSong) {
                     track = scheduleSong;
@@ -600,22 +537,17 @@
                     }
                 }
             }
-
-            if (!track || !track.url) {
-                console.warn('No scheduled track available to play.');
-                return;
-            }
+            if (!track || !track.url) return;
 
             const mainPlayer = document.getElementById('audio-player');
-            const wasPlaying = !mainPlayer.paused;
-            const originalTrackTitle = document.getElementById('current-track').innerText;
-            
-            // Explicitly pause the main player to maintain its position
-            mainPlayer.pause();
-            
+            const wasPlaying = mainPlayer && !mainPlayer.paused;
+            const currentTrackEl = document.getElementById('current-track');
+            const originalTitle = currentTrackEl ? currentTrackEl.innerText : '';
+
+            if (mainPlayer) mainPlayer.pause();
             isIntervalPlaying = true;
-            document.getElementById('current-track').innerText = 'Scheduled Play: ' + track.title;
-            
+            if (currentTrackEl) currentTrackEl.innerText = 'Scheduled Play: ' + track.title;
+
             try {
                 let audioUrl = track.url;
                 if (!track.isLocal) {
@@ -623,49 +555,34 @@
                     const data = await response.json();
                     audioUrl = data.url;
                 }
-                
-                if (audioUrl) {
-                    const scheduleAudio = new Audio(audioUrl);
-                    
-                    const cleanupAndResume = () => {
-                        console.log('Stopping schedule audio and resuming main player');
-                        isIntervalPlaying = false;
-                        
-                        // Stop and cleanup scheduled audio
-                        scheduleAudio.pause();
-                        scheduleAudio.currentTime = 0;
-                        scheduleAudio.src = "";
-                        scheduleAudio.load();
-                        
-                        // Resume main player if it was playing
-                        if (wasPlaying) {
-                            mainPlayer.play().catch(e => {
-                                console.error("Resume failed:", e);
-                                mainPlayer.load();
-                                mainPlayer.play().catch(e2 => console.error("Final resume failed:", e2));
-                            });
-                        }
-                        document.getElementById('current-track').innerText = originalTrackTitle;
-                    };
+                if (!audioUrl) throw new Error('No audio URL');
+                const scheduleAudio = new Audio(audioUrl);
 
-                    scheduleAudio.onended = cleanupAndResume;
-                    
-                    // Robust detection using timeupdate for track completion
-                    scheduleAudio.ontimeupdate = () => {
-                        if (scheduleAudio.duration > 0 && scheduleAudio.currentTime >= scheduleAudio.duration) {
-                            scheduleAudio.ontimeupdate = null;
-                            cleanupAndResume();
-                        }
-                    };
-                    
-                    scheduleAudio.play();
-                } else {
-                    throw new Error('No audio URL');
-                }
+                const cleanupAndResume = () => {
+                    isIntervalPlaying = false;
+                    scheduleAudio.pause();
+                    scheduleAudio.currentTime = 0;
+                    scheduleAudio.src = '';
+                    scheduleAudio.load();
+                    if (wasPlaying && mainPlayer) {
+                        mainPlayer.play().catch(() => {});
+                    }
+                    if (currentTrackEl) currentTrackEl.innerText = originalTitle;
+                };
+
+                scheduleAudio.onended = cleanupAndResume;
+                scheduleAudio.ontimeupdate = () => {
+                    if (scheduleAudio.duration > 0 && scheduleAudio.currentTime >= scheduleAudio.duration) {
+                        scheduleAudio.ontimeupdate = null;
+                        cleanupAndResume();
+                    }
+                };
+                scheduleAudio.play();
             } catch (error) {
+                console.error('Error playing scheduled track:', error);
                 isIntervalPlaying = false;
-                if (wasPlaying) mainPlayer.play();
-                document.getElementById('current-track').innerText = originalTrackTitle;
+                if (wasPlaying && mainPlayer) mainPlayer.play().catch(() => {});
+                if (currentTrackEl) currentTrackEl.innerText = originalTitle;
             }
         }
 
@@ -673,8 +590,8 @@
             const query = document.getElementById('interval-query').value;
             if (!query) return;
             const status = document.getElementById('interval-status');
-            status.innerText = 'Searching for interval song...';
-            
+            if (status) status.innerText = 'Searching for interval song...';
+
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const results = await response.json();
@@ -682,36 +599,38 @@
                     intervalSong = results[0];
                     intervalSong.isLocal = false;
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                    status.innerText = 'Interval song set: ' + intervalSong.title;
+                    if (status) status.innerText = 'Interval song set: ' + intervalSong.title;
                     startIntervalTimer();
                 } else {
-                    status.innerText = 'No songs found for interval.';
+                    if (status) status.innerText = 'No songs found for interval.';
                 }
             } catch (error) {
-                status.innerText = 'Error setting interval song.';
+                if (status) status.innerText = 'Error setting interval song.';
             }
         }
 
         async function uploadIntervalFile() {
             const fileInput = document.getElementById('interval-file');
-            if (fileInput.files.length === 0) {
+            if (!fileInput || fileInput.files.length === 0) {
                 alert('Please select a file first.');
                 return;
             }
-            
             const status = document.getElementById('interval-status');
-            status.innerText = 'Uploading...';
-            status.style.color = '#1db954';
-            
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            
             try {
                 const response = await fetch('/api/upload?type=interval', {
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok) throw new Error('Upload failed');
+           
+
+                    if (!response.ok) throw new Error('Upload failed');
                 const data = await response.json();
                 if (data.url) {
                     intervalSong = {
@@ -720,21 +639,21 @@
                         isLocal: true
                     };
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                    status.innerText = '✅ Interval file set: ' + data.title;
+                    if (status) status.innerText = '✅ Interval file set: ' + data.title;
                     loadSavedFiles();
                     startIntervalTimer();
                 }
             } catch (error) {
-                status.innerText = '❌ Error: ' + error.message;
-                status.style.color = '#ff4444';
+                if (status) {
+                    status.innerText = '❌ Error: ' + error.message;
+                    status.style.color = '#ff4444';
+                }
             }
         }
 
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
             let seconds = parseInt(document.getElementById('interval-time').value) || 180;
-
-            // Enforce max 6000 seconds
             if (seconds > 6000) {
                 seconds = 6000;
                 const input = document.getElementById('interval-time');
@@ -744,82 +663,76 @@
                 const input = document.getElementById('interval-time');
                 if (input) input.value = 1;
             }
-            
             intervalTimer = setInterval(() => {
-                const enabled = document.getElementById('interval-enabled').checked;
+                const enabled = document.getElementById('interval-enabled')?.checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
-                    console.log('Triggering interval play');
                     playIntervalTrack();
                 }
             }, seconds * 1000);
         }
 
-        // Add event listener to restart timer when value changes
         document.getElementById('interval-time').addEventListener('change', () => {
-            console.log('Interval time changed, restarting timer');
             startIntervalTimer();
         });
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
-            if (mainPlayer.src && !mainPlayer.paused) {
-                const wasPlaying = !mainPlayer.paused;
-                const originalTrackTitle = document.getElementById('current-track').innerText;
-                
-                mainPlayer.pause();
-                isIntervalPlaying = true;
-                document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
-                
-                try {
-                    let audioUrl = intervalSong.url;
-                    if (!intervalSong.isLocal) {
-                        const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
-                        const data = await response.json();
-                        audioUrl = data.url;
-                    }
-                    
-                    if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
-                        const cleanup = () => {
-                            isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
-                            if (wasPlaying) {
-                                mainPlayer.play().catch(e => console.error("Resume failed:", e));
-                            }
-                            document.getElementById('current-track').innerText = originalTrackTitle;
-                        };
-                        intervalAudio.onended = cleanup;
-                        intervalAudio.ontimeupdate = () => {
-                            if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
-                                intervalAudio.ontimeupdate = null;
-                                cleanup();
-                            }
-                        };
-                        intervalAudio.play();
-                    }
-                } catch (error) {
-                    isIntervalPlaying = false;
-                    mainPlayer.play();
-                    document.getElementById('current-track').innerText = originalTrackTitle;
+            if (!mainPlayer) return;
+            if (!mainPlayer.src || mainPlayer.paused) return;
+
+            const wasPlaying = !mainPlayer.paused;
+            const currentTrackEl = document.getElementById('current-track');
+            const originalTitle = currentTrackEl ? currentTrackEl.innerText : '';
+
+            mainPlayer.pause();
+            isIntervalPlaying = true;
+            if (currentTrackEl) currentTrackEl.innerText = 'Interval Playing: ' + intervalSong.title;
+
+            try {
+                let audioUrl = intervalSong.url;
+                if (!intervalSong.isLocal) {
+                    const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
+                    const data = await response.json();
+                    audioUrl = data.url;
                 }
+                if (!audioUrl) return;
+                const intervalAudio = new Audio(audioUrl);
+
+                const cleanup = () => {
+                    isIntervalPlaying = false;
+                    intervalAudio.pause();
+                    intervalAudio.src = '';
+                    if (wasPlaying) {
+                        mainPlayer.play().catch(() => {});
+                    }
+                    if (currentTrackEl) currentTrackEl.innerText = originalTitle;
+                };
+                intervalAudio.onended = cleanup;
+                intervalAudio.ontimeupdate = () => {
+                    if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                        intervalAudio.ontimeupdate = null;
+                        cleanup();
+                    }
+                };
+                intervalAudio.play();
+            } catch (error) {
+                isIntervalPlaying = false;
+                mainPlayer.play().catch(() => {});
+                if (currentTrackEl) currentTrackEl.innerText = originalTitle;
             }
         }
-
-        let searchResults = [];
 
         async function search() {
             const query = document.getElementById('query').value;
             if (!query) return;
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = 'Searching...';
-            
+
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const results = await response.json();
-                searchResults = results; // Store results for autoplay
+                searchResults = results;
                 resultsDiv.innerHTML = '';
-                
                 results.forEach(track => {
                     const div = document.createElement('div');
                     div.className = 'track';
@@ -838,42 +751,30 @@
         }
 
         async function playTrack(track) {
-            document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
-            
+            const currentTrackEl = document.getElementById('current-track');
+            if (currentTrackEl) currentTrackEl.innerText = 'Loading: ' + track.title;
+
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                 const data = await response.json();
                 if (data.url) {
                     player.src = data.url;
                     player.load();
-                    
                     player.onended = () => {
                         if (searchResults.length > 0) {
                             const randomIndex = Math.floor(Math.random() * searchResults.length);
                             playTrack(searchResults[randomIndex]);
                         }
                     };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
                     const playPromise = player.play();
-                    
                     if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            document.getElementById('current-track').innerText = 'Playing: ' + track.title;
-                        }).catch(error => {
-                            console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
+                        playPromise.then(() => {
+                            if (currentTrackEl) currentTrackEl.innerText = 'Playing: ' + track.title;
+                        }).catch(() => {
                             setTimeout(() => {
-                                player.play().catch(e => {
-                                    document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
+                                player.play().catch(() => {
+                                    if (currentTrackEl) currentTrackEl.innerText = 'Paused (Click Play): ' + track.title;
                                 });
                             }, 100);
                         });
@@ -883,6 +784,17 @@
                 console.error('Error playing track:', error);
             }
         }
+
+        function pauseScheduleTrack() {}
+        function stopScheduleTrack() {
+            const player = document.getElementById('audio-player');
+            if (player) {
+                player.pause();
+                player.currentTime = 0;
+            }
+        }
+        function pauseIntervalTrack() {}
+        function stopIntervalTrack() {}
     </script>
 </body>
 </html>
