@@ -96,8 +96,25 @@
     </div>
 
     <script>
-        // Initialize clock immediately on load
+        // Per-track schedule configuration
+        let scheduleConfigs = [];
+        const lastScheduleTriggers = {}; // { url: 'YYYY-MM-DD HH:MM' }
+
+        function loadScheduleConfigs() {
+            try {
+                scheduleConfigs = JSON.parse(localStorage.getItem('scheduleConfigs') || '[]');
+            } catch (_) {
+                scheduleConfigs = [];
+            }
+        }
+
+        function saveScheduleConfigs() {
+            localStorage.setItem('scheduleConfigs', JSON.stringify(scheduleConfigs));
+        }
+
+        // Initialize clock and state on load
         window.onload = () => {
+            // Clock
             setInterval(() => {
                 const clock = document.getElementById('current-clock');
                 if (clock) {
@@ -105,6 +122,8 @@
                     clock.innerText = now.toLocaleTimeString();
                 }
             }, 1000);
+
+            loadScheduleConfigs();
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
@@ -120,58 +139,14 @@
                 scheduleSong = JSON.parse(savedSchedule);
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
             }
-            
-            // Initialize schedule times
-            const savedTimes = JSON.parse(localStorage.getItem('scheduleTimes') || '[]');
-            if (savedTimes.length === 0) {
-                addScheduleTime(); // Add one default time if none saved
-            } else {
-                savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
-            }
         };
-
-        function addScheduleTime(value = '', enabled = true) {
-            const container = document.getElementById('schedule-times-container');
-            const id = 'time-' + Date.now() + Math.random().toString(36).substr(2, 9);
-            
-            const div = document.createElement('div');
-            div.id = id;
-            div.style.display = 'flex';
-            div.style.alignItems = 'center';
-            div.style.gap = '10px';
-            div.style.marginBottom = '5px';
-            div.className = 'schedule-time-row';
-            
-            div.innerHTML = `
-                <input type="checkbox" class="time-enabled" ${enabled ? 'checked' : ''} style="width: auto;" onchange="saveScheduleTimes()">
-                <input type="time" class="time-value" value="${value}" style="flex: 1; padding: 5px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;" onchange="saveScheduleTimes()">
-                <button onclick="removeScheduleTime('${id}')" style="background: transparent; border: none; cursor: pointer; padding: 0;">🗑️</button>
-            `;
-            container.appendChild(div);
-            saveScheduleTimes();
-        }
-
-        function removeScheduleTime(id) {
-            const el = document.getElementById(id);
-            if (el) el.remove();
-            saveScheduleTimes();
-        }
-
-        function saveScheduleTimes() {
-            const rows = document.querySelectorAll('.schedule-time-row');
-            const times = Array.from(rows).map(row => ({
-                enabled: row.querySelector('.time-enabled').checked,
-                value: row.querySelector('.time-value').value
-            })).filter(t => t.value);
-            localStorage.setItem('scheduleTimes', JSON.stringify(times));
-        }
 
         async function loadSavedFiles() {
             try {
                 const response = await fetch('/api/files');
                 const files = await response.json();
                 renderFilesList('interval-files-list', files, 'interval');
-                renderFilesList('schedule-files-list', files, 'schedule');
+                renderScheduleFilesList(files);
             } catch (error) {
                 console.error('Error loading files:', error);
             }
@@ -211,6 +186,104 @@
                 
                 div.appendChild(nameSpan);
                 div.appendChild(deleteBtn);
+                container.appendChild(div);
+            });
+        }
+
+        // Schedule list: time and enable per track
+        function renderScheduleFilesList(files) {
+            const container = document.getElementById('schedule-files-list');
+            if (!container) return;
+
+            if (files.length === 0) {
+                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
+                scheduleConfigs = [];
+                saveScheduleConfigs();
+                return;
+            }
+
+            // Ensure every file has a config
+            files.forEach(file => {
+                const existing = scheduleConfigs.find(c => c.title === file.title && c.url === file.url);
+                if (!existing) {
+                    scheduleConfigs.push({
+                        title: file.title,
+                        url: file.url,
+                        isLocal: true,
+                        enabled: true,
+                        time: '' // user will set
+                    });
+                }
+            });
+
+            // Remove configs for files that no longer exist
+            const titles = new Set(files.map(f => f.title + '|' + f.url));
+            scheduleConfigs = scheduleConfigs.filter(c => titles.has(c.title + '|' + c.url));
+            saveScheduleConfigs();
+
+            container.innerHTML = '';
+            scheduleConfigs.forEach((config, index) => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.gap = '8px';
+                div.style.marginBottom = '5px';
+                div.style.fontSize = '0.85em';
+
+                const enableCheckbox = document.createElement('input');
+                enableCheckbox.type = 'checkbox';
+                enableCheckbox.checked = config.enabled;
+                enableCheckbox.style.width = 'auto';
+                enableCheckbox.onchange = () => {
+                    scheduleConfigs[index].enabled = enableCheckbox.checked;
+                    saveScheduleConfigs();
+                };
+
+                const nameSpan = document.createElement('span');
+                nameSpan.innerText = config.title;
+                nameSpan.style.cursor = 'pointer';
+                nameSpan.style.flex = '1';
+                nameSpan.onclick = () => {
+                    // Select for manual Play button
+                    scheduleSong = {
+                        title: config.title,
+                        url: config.url,
+                        isLocal: config.isLocal
+                    };
+                    localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
+                    document.getElementById('schedule-status').innerText = 'Selected: ' + config.title;
+                };
+
+                const timeInput = document.createElement('input');
+                timeInput.type = 'time';
+                timeInput.value = config.time || '';
+                timeInput.style.flex = '0 0 90px';
+                timeInput.style.padding = '3px';
+                timeInput.style.borderRadius = '5px';
+                timeInput.style.background = '#333';
+                timeInput.style.color = 'white';
+                timeInput.style.border = '1px solid #444';
+                timeInput.onchange = () => {
+                    scheduleConfigs[index].time = timeInput.value;
+                    saveScheduleConfigs();
+                };
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerText = '🗑️';
+                deleteBtn.style.padding = '2px 5px';
+                deleteBtn.style.background = 'transparent';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteSavedFile(config.title);
+                };
+
+                div.appendChild(enableCheckbox);
+                div.appendChild(nameSpan);
+                div.appendChild(timeInput);
+                div.appendChild(deleteBtn);
+
                 container.appendChild(div);
             });
         }
@@ -259,10 +332,6 @@
             }
         }
 
-        document.getElementById('schedule-time')?.addEventListener('change', (e) => {
-            localStorage.setItem('scheduleTime', e.target.value);
-        });
-
         let intervalSong = null;
         let intervalAudio = null;
         let scheduleAudio = null;
@@ -283,6 +352,7 @@
                 const results = await response.json();
                 if (results.length > 0) {
                     scheduleSong = results[0];
+                    scheduleSong.isLocal = false;
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
                     status.innerText = 'Scheduled song set: ' + scheduleSong.title;
                     startScheduleChecker();
@@ -330,6 +400,21 @@
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
                     status.innerText = '✅ File uploaded and set: ' + data.title;
                     status.style.color = '#1db954';
+
+                    // Ensure this uploaded file has a schedule config entry
+                    loadScheduleConfigs();
+                    const existing = scheduleConfigs.find(c => c.title === data.title && c.url === data.url);
+                    if (!existing) {
+                        scheduleConfigs.push({
+                            title: data.title,
+                            url: data.url,
+                            isLocal: true,
+                            enabled: true,
+                            time: '' // user can set a time next to the track
+                        });
+                        saveScheduleConfigs();
+                    }
+
                     loadSavedFiles();
                     startScheduleChecker();
                 }
@@ -342,39 +427,62 @@
         }
 
         function startScheduleChecker() {
-            let scheduleChecker = null;
             function runChecker() {
                 const globalEnabled = document.getElementById('schedule-enabled').checked;
-                if (!globalEnabled || !scheduleSong) return;
+                if (!globalEnabled) return;
+                if (!scheduleConfigs || scheduleConfigs.length === 0) return;
 
-                const rows = document.querySelectorAll('.schedule-time-row');
                 const now = new Date();
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                
-                rows.forEach(row => {
-                    const checkbox = row.querySelector('.time-enabled');
-                    const timeInput = row.querySelector('.time-value');
-                    const setTime = timeInput.value;
-                    
-                    if (checkbox.checked && !checkbox.disabled && setTime === currentTime && !isIntervalPlaying) {
-                        console.log('Triggering scheduled play at:', currentTime);
-                        playScheduleTrack();
-                        
-                        // Disable this specific time for the rest of the minute
-                        checkbox.disabled = true;
-                        checkbox.checked = false;
-                        saveScheduleTimes();
-                        
-                        setTimeout(() => {
-                            checkbox.disabled = false;
-                        }, 61000);
+                const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
+
+                scheduleConfigs.forEach(config => {
+                    if (!config.enabled || !config.time || !config.url) return;
+                    if (config.time !== currentTime) return;
+                    if (isIntervalPlaying) return;
+
+                    const key = `${dateKey} ${currentTime}`;
+                    if (lastScheduleTriggers[config.url] === key) {
+                        // Already played this track for this minute today
+                        return;
                     }
+
+                    console.log('Triggering scheduled play at:', currentTime, 'for track:', config.title);
+                    lastScheduleTriggers[config.url] = key;
+
+                    playScheduleTrack({
+                        title: config.title,
+                        url: config.url,
+                        isLocal: config.isLocal
+                    });
                 });
             }
             setInterval(runChecker, 1000);
         }
 
-        async function playScheduleTrack() {
+        async function playScheduleTrack(track = null) {
+            // If called without a specific track (e.g. from the Play button),
+            // use the currently selected scheduleSong, or the first enabled scheduled config.
+            if (!track) {
+                if (scheduleSong) {
+                    track = scheduleSong;
+                } else if (scheduleConfigs && scheduleConfigs.length > 0) {
+                    const firstEnabled = scheduleConfigs.find(c => c.enabled && c.time);
+                    if (firstEnabled) {
+                        track = {
+                            title: firstEnabled.title,
+                            url: firstEnabled.url,
+                            isLocal: firstEnabled.isLocal
+                        };
+                    }
+                }
+            }
+
+            if (!track || !track.url) {
+                console.warn('No scheduled track available to play.');
+                return;
+            }
+
             const mainPlayer = document.getElementById('audio-player');
             const wasPlaying = !mainPlayer.paused;
             const originalTrackTitle = document.getElementById('current-track').innerText;
@@ -383,12 +491,12 @@
             mainPlayer.pause();
             
             isIntervalPlaying = true;
-            document.getElementById('current-track').innerText = 'Scheduled Play: ' + scheduleSong.title;
+            document.getElementById('current-track').innerText = 'Scheduled Play: ' + track.title;
             
             try {
-                let audioUrl = scheduleSong.url;
-                if (!scheduleSong.isLocal) {
-                    const response = await fetch(`/api/play?url=${encodeURIComponent(scheduleSong.url)}`);
+                let audioUrl = track.url;
+                if (!track.isLocal) {
+                    const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                     const data = await response.json();
                     audioUrl = data.url;
                 }
