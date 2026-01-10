@@ -113,7 +113,9 @@
         let scheduleConfigs = [];
         const lastScheduleTriggers = {};
         let intervalSong = null;
-        let intervalTimer = null;
+        let intervalTimer = null;      // legacy, not used after refactor but kept to avoid errors
+        let intervalTimeout = null;    // timeout handle for next interval play
+        let intervalDelayMs = 180000;  // current interval delay in ms
         let isIntervalPlaying = false;
         let scheduleSong = null;
         let searchResults = [];
@@ -160,6 +162,8 @@
                 intervalSong = JSON.parse(savedInterval);
                 const el = document.getElementById('interval-status');
                 if (el) el.innerText = 'Restored: ' + intervalSong.title;
+                // Ensure interval timer is configured for restored track
+                startIntervalTimer();
             }
             const savedSchedule = localStorage.getItem('scheduleSong');
             if (savedSchedule) {
@@ -641,6 +645,7 @@
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
                     if (status) status.innerText = '✅ Interval file set: ' + data.title;
                     loadSavedFiles();
+                    // Start timer chain for newly set interval track
                     startIntervalTimer();
                 }
             } catch (error) {
@@ -651,8 +656,8 @@
             }
         }
 
-        function startIntervalTimer() {
-            if (intervalTimer) clearInterval(intervalTimer);
+        // Interval timer: wait N seconds AFTER previous interval track finishes, then play again.
+        function configureIntervalDelay() {
             let seconds = parseInt(document.getElementById('interval-time').value) || 180;
             if (seconds > 6000) {
                 seconds = 6000;
@@ -663,16 +668,34 @@
                 const input = document.getElementById('interval-time');
                 if (input) input.value = 1;
             }
-            intervalTimer = setInterval(() => {
-                const enabled = document.getElementById('interval-enabled')?.checked;
-                if (enabled && intervalSong && !isIntervalPlaying) {
+            intervalDelayMs = seconds * 1000;
+        }
+
+        function scheduleNextIntervalPlay() {
+            // Clear any previous timeout
+            if (intervalTimeout) {
+                clearTimeout(intervalTimeout);
+                intervalTimeout = null;
+            }
+            const enabled = document.getElementById('interval-enabled')?.checked;
+            if (!enabled || !intervalSong) {
+                return;
+            }
+            intervalTimeout = setTimeout(() => {
+                if (intervalSong && document.getElementById('interval-enabled')?.checked) {
                     playIntervalTrack();
                 }
-            }, seconds * 1000);
+            }, intervalDelayMs);
+        }
+
+        function startIntervalTimer() {
+            configureIntervalDelay();
+            scheduleNextIntervalPlay();
         }
 
         document.getElementById('interval-time').addEventListener('change', () => {
-            startIntervalTimer();
+            configureIntervalDelay();
+            scheduleNextIntervalPlay();
         });
 
         async function playIntervalTrack() {
