@@ -113,9 +113,9 @@
         let scheduleConfigs = [];
         const lastScheduleTriggers = {};
         let intervalSong = null;
-        let intervalTimer = null;      // legacy, not used after refactor but kept to avoid errors
-        let intervalTimeout = null;    // timeout handle for next interval play
-        let intervalDelayMs = 180000;  // current interval delay in ms
+        let intervalTimer = null;          // legacy, kept for compatibility
+        let intervalTimeout = null;        // timeout handle for interval trigger relative to main track
+        let intervalDelayMs = 180000;      // current interval delay in ms
         let isIntervalPlaying = false;
         let scheduleSong = null;
         let searchResults = [];
@@ -656,7 +656,7 @@
             }
         }
 
-        // Interval timer: delay after a MAIN track finishes, then play interval track once.
+        // Interval timer: delay AFTER main track STARTS, then play interval track once.
         // The delay is configured from the "Interval (seconds)" input.
         function configureIntervalDelay() {
             let seconds = parseInt(document.getElementById('interval-time').value) || 180;
@@ -673,7 +673,7 @@
         }
 
         function startIntervalTimer() {
-            // Just (re)read the delay value; scheduling happens when main track ends.
+            // Just (re)read the delay value; scheduling happens when a main track starts.
             configureIntervalDelay();
         }
 
@@ -788,23 +788,34 @@
                 if (data.url) {
                     player.src = data.url;
                     player.load();
+                    // When main track ends, we can optionally auto-play another search result (unchanged logic)
                     player.onended = () => {
-                        // When main track finishes, wait the configured interval delay,
-                        // then play the interval track once (if enabled and set).
-                        const enabled = document.getElementById('interval-enabled')?.checked;
-                        if (enabled && intervalSong) {
-                            setTimeout(() => {
-                                const stillEnabled = document.getElementById('interval-enabled')?.checked;
-                                if (stillEnabled && intervalSong) {
-                                    playIntervalTrack();
-                                }
-                            }, intervalDelayMs);
+                        if (searchResults.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * searchResults.length);
+                            playTrack(searchResults[randomIndex]);
                         }
                     };
                     const playPromise = player.play();
                     if (playPromise !== undefined) {
                         playPromise.then(() => {
                             if (currentTrackEl) currentTrackEl.innerText = 'Playing: ' + track.title;
+
+                            // Schedule interval track AFTER main track has started.
+                            const enabled = document.getElementById('interval-enabled')?.checked;
+                            if (enabled && intervalSong) {
+                                // Clear any previous interval timeout tied to an older main track
+                                if (intervalTimeout) {
+                                    clearTimeout(intervalTimeout);
+                                    intervalTimeout = null;
+                                }
+                                intervalTimeout = setTimeout(() => {
+                                    const stillEnabled = document.getElementById('interval-enabled')?.checked;
+                                    if (stillEnabled && intervalSong) {
+                                        playIntervalTrack();
+                                    }
+                                }, intervalDelayMs);
+                            }
+
                         }).catch(() => {
                             setTimeout(() => {
                                 player.play().catch(() => {
