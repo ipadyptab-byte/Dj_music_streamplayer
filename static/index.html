@@ -110,35 +110,12 @@
         let scheduleConfigs = [];
         const lastScheduleTriggers = {}; // { url: 'YYYY-MM-DD HH:MM' }
 
-        // Interval list configuration (names of files shown in Interval list)
-        let intervalListConfig = [];
-
         function loadScheduleConfigs() {
             try {
                 scheduleConfigs = JSON.parse(localStorage.getItem('scheduleConfigs') || '[]');
             } catch (_) {
                 scheduleConfigs = [];
             }
-        }
-
-        function loadIntervalListConfig() {
-            try {
-                intervalListConfig = JSON.parse(localStorage.getItem('intervalListConfig') || '[]');
-                if (!Array.isArray(intervalListConfig)) intervalListConfig = [];
-            } catch (_) {
-                intervalListConfig = [];
-            }
-        }
-
-        function saveIntervalListConfig() {
-            localStorage.setItem('intervalListConfig', JSON.stringify(intervalListConfig));
-        }
-
-        function removeIntervalEntry(filename) {
-            intervalListConfig = intervalListConfig.filter(name => name !== filename);
-            saveIntervalListConfig();
-            // Refresh only the interval list
-            loadSavedFiles();
         }
 
         
@@ -169,7 +146,6 @@
             }, 1000);
 
             loadScheduleConfigs();
-            loadIntervalListConfig();
 
             // Restore global schedule enabled flag
             const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
@@ -217,65 +193,85 @@
 
         async function loadSavedFiles() {
             try {
-                const response = await fetch('/api/files');
-                const files = await response.json();
+                const [intervalRes, scheduleRes] = await Promise.all([
+                    fetch('/api/files?type=interval'),
+                    fetch('/api/files?type=schedule')
+                ]);
+                const intervalFiles = await intervalRes.json();
+                const scheduleFiles = await scheduleRes.json();
 
-                // Initialize interval list config once with all files if empty
-                if (!intervalListConfig || intervalListConfig.length === 0) {
-                    intervalListConfig = files.map(f => f.title);
-                    saveIntervalListConfig();
-                }
-
-                renderIntervalFilesList(files);
-                renderScheduleFilesList(files);
+                renderIntervalFilesList(intervalFiles);
+                renderScheduleFilesList(scheduleFiles);
             } catch (error) {
                 console.error('Error loading files:', error);
             }
         }
 
-        // Delete ALL uploaded audio files (used by "Clear Schedule (Delete All)" button)
+        // Interval list: shows files stored in the interval folder.
+        // Delete ALL schedule audio files (used by "Clear Schedule (Delete All)" button)
         async function clearScheduleTracks() {
-            if (!confirm('Delete ALL uploaded audio files from disk? This clears Schedule and Interval lists.')) {
+            if (!confirm('Delete ALL schedule audio files from disk? Interval files will not be touched.')) {
                 return;
             }
             try {
-                const response = await fetch('/api/files');
+                const response = await fetch('/api/files?type=schedule');
                 const files = await response.json();
                 for (const file of files) {
                     await fetch('/api/delete', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filename: file.title })
+                        body: JSON.stringify({ filename: file.title, type: 'schedule' })
                     });
                 }
                 scheduleConfigs = [];
                 saveScheduleConfigs();
-                intervalListConfig = [];
-                saveIntervalListConfig();
                 loadSavedFiles();
             } catch (error) {
                 console.error('Error clearing schedule tracks:', error);
             }
         }
 
-        // Interval list: shows only files currently in intervalListConfig.
-        // Deleting from this list removes the file only from the INTERVAL LIST (not from disk).
-        function renderIntervalFilesList(files) {
-            const container = document.getElementById('interval-files-list');
-            if (!container) return;
-
-            if (!files || files.length === 0 || !intervalListConfig || intervalListConfig.length === 0) {
-                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No interval tracks in list.</div>';
-                return;
-            }
-
-            const set = new Set(intervalListConfig);
-            const shownFiles = files.filter(f => set.has(f.title));
-
-            if (shownFiles.length === 0) {
-                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No interval tracks in list.</div>';
-                return;
-            }
+            container.innerHTML = '';
+            files.forEach(file => {
+                const div = document.createElement('div');
+                div.style.display = 'flex';
+                div.style.justifyContent = 'space-between';
+                div.style.alignItems = 'center';
+                div.style.marginBottom = '5px';
+                div.style.fontSize = '0.85em';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.innerText = file.title;
+                nameSpan.style.cursor = 'pointer';
+                nameSpan.style.flex = '1';
+                nameSpan.onclick = () => selectSavedFile(file, 'interval');
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerText = '🗑️';
+                deleteBtn.style.padding = '2px 5px';
+                deleteBtn.style.background = 'transparent';
+                deleteBtn.style.border = 'none';
+                deleteBtn.style.cursor = 'pointer';
+                deleteBtn.title = 'Delete from interval folder only';
+                deleteBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    try {
+                        await fetch('/api/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: file.title, type: 'interval' })
+                        });
+                        loadSavedFiles();
+                    } catch (err) {
+                        console.error('Error deleting interval file:', err);
+                    }
+                };
+                
+                div.appendChild(nameSpan);
+                div.appendChild(deleteBtn);
+                container.appendChild(div);
+            });
+        }
 
             container.innerHTML = '';
             shownFiles.forEach(file => {
@@ -401,10 +397,19 @@
                 deleteBtn.style.background = 'transparent';
                 deleteBtn.style.border = 'none';
                 deleteBtn.style.cursor = 'pointer';
-                deleteBtn.title = 'Delete audio file from disk (removes from all lists)';
-                deleteBtn.onclick = (e) => {
+                deleteBtn.title = 'Delete from schedule folder only';
+                deleteBtn.onclick = async (e) => {
                     e.stopPropagation();
-                    deleteSavedFile(config.title);
+                    try {
+                        await fetch('/api/delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename: config.title, type: 'schedule' })
+                        });
+                        loadSavedFiles();
+                    } catch (err) {
+                        console.error('Error deleting schedule file:', err);
+                    }
                 };
 
                 div.appendChild(enableCheckbox);
@@ -481,7 +486,7 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=schedule', {
                     method: 'POST',
                     body: formData
                 });
@@ -702,7 +707,7 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=interval', {
                     method: 'POST',
                     body: formData
                 });

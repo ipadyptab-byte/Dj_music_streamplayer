@@ -15,12 +15,17 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_ROOT = os.path.join(BASE_DIR, 'uploads')
+INTERVAL_FOLDER = os.path.join(UPLOAD_ROOT, 'interval')
+SCHEDULE_FOLDER = os.path.join(UPLOAD_ROOT, 'schedule')
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(INTERVAL_FOLDER, exist_ok=True)
+os.makedirs(SCHEDULE_FOLDER, exist_ok=True)
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_ROOT'] = UPLOAD_ROOT
+app.config['INTERVAL_FOLDER'] = INTERVAL_FOLDER
+app.config['SCHEDULE_FOLDER'] = SCHEDULE_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
 # ===============================
@@ -39,14 +44,45 @@ def upload_file():
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(save_path)
-    return jsonify({'url': f'/api/uploads/{filename}', 'title': filename})
 
-@app.route('/api/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    upload_type = request.args.get('type', 'common')
+    filename = secure_filename(file.filename)
+
+    if upload_type == 'interval':
+        folder = app.config['INTERVAL_FOLDER']
+        url = f'/api/uploads/interval/{filename}'
+    elif upload_type == 'schedule':
+        folder = app.config['SCHEDULE_FOLDER']
+        url = f'/api/uploads/schedule/{filename}'
+    else:
+        # Default: store under uploads root without subfolder
+        folder = app.config['UPLOAD_ROOT']
+        url = f'/api/uploads/{filename}'
+
+    os.makedirs(folder, exist_ok=True)
+    save_path = os.path.join(folder, filename)
+    file.save(save_path)
+
+    return jsonify({'url': url, 'title': filename})
+
+
+@app.route('/api/uploads/<path:subpath>')
+def uploaded_file(subpath):
+    parts = subpath.split('/')
+    if len(parts) == 2:
+        folder_key, filename = parts
+        if folder_key == 'interval':
+            directory = app.config['INTERVAL_FOLDER']
+        elif folder_key == 'schedule':
+            directory = app.config['SCHEDULE_FOLDER']
+        else:
+            directory = app.config['UPLOAD_ROOT']
+            filename = subpath
+    else:
+        directory = app.config['UPLOAD_ROOT']
+        filename = subpath
+
+    return send_from_directory(directory, filename)
 
 def search_youtube(query):
     ydl_opts = {
@@ -108,15 +144,55 @@ def play():
 
 @app.route('/api/files')
 def list_files():
-    files = os.listdir(app.config['UPLOAD_FOLDER'])
-    return jsonify([{'title': f, 'url': f'/api/uploads/{f}'} for f in files])
+    list_type = request.args.get('type')
+    files = []
+
+    if list_type == 'interval':
+        folder = app.config['INTERVAL_FOLDER']
+        if os.path.isdir(folder):
+            files = [{'title': f, 'url': f'/api/uploads/interval/{f}'} for f in os.listdir(folder)]
+    elif list_type == 'schedule':
+        folder = app.config['SCHEDULE_FOLDER']
+        if os.path.isdir(folder):
+            files = [{'title': f, 'url': f'/api/uploads/schedule/{f}'} for f in os.listdir(folder)]
+    else:
+        # Default: aggregate all
+        all_files = []
+        for folder, prefix in [
+            (app.config['INTERVAL_FOLDER'], 'interval'),
+            (app.config['SCHEDULE_FOLDER'], 'schedule'),
+            (app.config['UPLOAD_ROOT'], '')
+        ]:
+            if os.path.isdir(folder):
+                for f in os.listdir(folder):
+                    url = f'/api/uploads/{prefix}/{f}' if prefix else f'/api/uploads/{f}'
+                    all_files.append({'title': f, 'url': url})
+        files = all_files
+
+    return jsonify(files)
+
 
 @app.route('/api/delete', methods=['POST'])
 def delete_file():
     filename = secure_filename(request.json.get('filename', ''))
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
+    delete_type = request.json.get('type')
+
+    folders = []
+    if delete_type == 'interval':
+        folders = [app.config['INTERVAL_FOLDER']]
+    elif delete_type == 'schedule':
+        folders = [app.config['SCHEDULE_FOLDER']]
+    else:
+        folders = [app.config['INTERVAL_FOLDER'], app.config['SCHEDULE_FOLDER'], app.config['UPLOAD_ROOT']]
+
+    deleted = False
+    for folder in folders:
+        file_path = os.path.join(folder, filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            deleted = True
+
+    if deleted:
         return jsonify({'success': True})
     return jsonify({'error': 'File not found'}), 404
 
