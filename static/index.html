@@ -105,11 +105,24 @@
                     clock.innerText = now.toLocaleTimeString();
                 }
             }, 1000);
-            startScheduleChecker();
-            startIntervalTimer();
-            loadSavedFiles();
-            
-            // Restore from localStorage
+
+            // Restore simple settings from localStorage
+            const savedIntervalTime = localStorage.getItem('intervalTime');
+            if (savedIntervalTime) {
+                document.getElementById('interval-time').value = savedIntervalTime;
+            }
+
+            const savedIntervalEnabled = localStorage.getItem('intervalEnabled');
+            if (savedIntervalEnabled !== null) {
+                document.getElementById('interval-enabled').checked = savedIntervalEnabled === '1';
+            }
+
+            const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
+            if (savedScheduleEnabled !== null) {
+                document.getElementById('schedule-enabled').checked = savedScheduleEnabled === '1';
+            }
+
+            // Restore from localStorage: selected songs
             const savedInterval = localStorage.getItem('intervalSong');
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
@@ -121,13 +134,28 @@
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
             }
             
-            // Initialize schedule times
+            // Initialize schedule times (per-time settings)
             const savedTimes = JSON.parse(localStorage.getItem('scheduleTimes') || '[]');
             if (savedTimes.length === 0) {
                 addScheduleTime(); // Add one default time if none saved
             } else {
                 savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
             }
+
+            // Start timers/checkers AFTER restoring settings
+            startScheduleChecker();
+            startIntervalTimer();
+
+            // Load saved files for each category
+            loadSavedFiles();
+
+            // Persist enable/disable toggles
+            document.getElementById('interval-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('intervalEnabled', e.target.checked ? '1' : '0');
+            });
+            document.getElementById('schedule-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('scheduleEnabled', e.target.checked ? '1' : '0');
+            });
         };
 
         function addScheduleTime(value = '', enabled = true) {
@@ -168,10 +196,14 @@
 
         async function loadSavedFiles() {
             try {
-                const response = await fetch('/api/files');
-                const files = await response.json();
-                renderFilesList('interval-files-list', files, 'interval');
-                renderFilesList('schedule-files-list', files, 'schedule');
+                const [intervalRes, scheduleRes] = await Promise.all([
+                    fetch('/api/files?type=interval'),
+                    fetch('/api/files?type=schedule')
+                ]);
+                const intervalFiles = await intervalRes.json();
+                const scheduleFiles = await scheduleRes.json();
+                renderFilesList('interval-files-list', intervalFiles, 'interval');
+                renderFilesList('schedule-files-list', scheduleFiles, 'schedule');
             } catch (error) {
                 console.error('Error loading files:', error);
             }
@@ -179,7 +211,7 @@
 
         function renderFilesList(containerId, files, type) {
             const container = document.getElementById(containerId);
-            if (files.length === 0) {
+            if (!files || files.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
                 return;
             }
@@ -206,7 +238,7 @@
                 deleteBtn.style.cursor = 'pointer';
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
-                    deleteSavedFile(file.title);
+                    deleteSavedFile(file.title, type);
                 };
                 
                 div.appendChild(nameSpan);
@@ -232,23 +264,23 @@
             }
         }
 
-        async function deleteSavedFile(filename) {
+        async function deleteSavedFile(filename, type) {
             if (!confirm(`Delete ${filename}?`)) return;
             try {
                 const response = await fetch('/api/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename })
+                    body: JSON.stringify({ filename, type })
                 });
                 if (response.ok) {
                     loadSavedFiles();
                     // Clear if it was currently selected
-                    if (intervalSong && intervalSong.title === filename) {
+                    if (type === 'interval' && intervalSong && intervalSong.title === filename) {
                         intervalSong = null;
                         localStorage.removeItem('intervalSong');
                         document.getElementById('interval-status').innerText = '';
                     }
-                    if (scheduleSong && scheduleSong.title === filename) {
+                    if (type === 'schedule' && scheduleSong && scheduleSong.title === filename) {
                         scheduleSong = null;
                         localStorage.removeItem('scheduleSong');
                         document.getElementById('schedule-status').innerText = '';
@@ -310,7 +342,7 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=schedule', {
                     method: 'POST',
                     body: formData
                 });
@@ -476,7 +508,7 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=interval', {
                     method: 'POST',
                     body: formData
                 });
@@ -502,13 +534,11 @@
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
+
+            // Persist current interval time as default
+            localStorage.setItem('intervalTime', seconds.toString());
             
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
-            intervalTimer = setInterval(() => {
+            intervalTimer = setInterval(() =&gt; {
                 const enabled = document.getElementById('interval-enabled').checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
                     console.log('Triggering interval play');
@@ -516,9 +546,9 @@
                 }
             }, seconds * 1000);
         }
-
+        
         // Add event listener to restart timer when value changes
-        document.getElementById('interval-time').addEventListener('change', () => {
+        document.getElementById('interval-time').addEventListener('change', () =&gt; {
             console.log('Interval time changed, restarting timer');
             startIntervalTimer();
         });
