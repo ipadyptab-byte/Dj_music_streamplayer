@@ -46,7 +46,10 @@
             <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
             <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
         </div>
-        <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+        <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
+            Interval Tracks
+        </div>
+        <div id="interval-files-list" style="margin-top: 5px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
             Loading saved files...
         </div>
         <div style="margin-top: 10px;">
@@ -73,12 +76,18 @@
             Time for selected track (YouTube or uploaded): 
             <input type="time" id="schedule-song-time" style="padding: 3px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;">
         </div>
+        <div style="margin-top: 6px; font-size: 0.8em;">
+            Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.0em; color: #1db954;">00:00:00</span>
+        </div>
         <div style="margin-top: 10px; display: flex; gap: 5px;">
             <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
             <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
             <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
         </div>
-        <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+        <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
+            Schedule Tracks
+        </div>
+        <div id="schedule-files-list" style="margin-top: 5px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
             Loading saved files...
         </div>
         <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center;">
