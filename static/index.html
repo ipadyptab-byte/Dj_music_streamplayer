@@ -656,7 +656,8 @@
             }
         }
 
-        // Interval timer: wait N seconds AFTER previous interval track finishes, then play again.
+        // Interval timer: delay after a MAIN track finishes, then play interval track once.
+        // The delay is configured from the "Interval (seconds)" input.
         function configureIntervalDelay() {
             let seconds = parseInt(document.getElementById('interval-time').value) || 180;
             if (seconds > 6000) {
@@ -671,31 +672,13 @@
             intervalDelayMs = seconds * 1000;
         }
 
-        function scheduleNextIntervalPlay() {
-            // Clear any previous timeout
-            if (intervalTimeout) {
-                clearTimeout(intervalTimeout);
-                intervalTimeout = null;
-            }
-            const enabled = document.getElementById('interval-enabled')?.checked;
-            if (!enabled || !intervalSong) {
-                return;
-            }
-            intervalTimeout = setTimeout(() => {
-                if (intervalSong && document.getElementById('interval-enabled')?.checked) {
-                    playIntervalTrack();
-                }
-            }, intervalDelayMs);
-        }
-
         function startIntervalTimer() {
+            // Just (re)read the delay value; scheduling happens when main track ends.
             configureIntervalDelay();
-            scheduleNextIntervalPlay();
         }
 
         document.getElementById('interval-time').addEventListener('change', () => {
             configureIntervalDelay();
-            scheduleNextIntervalPlay();
         });
 
         async function playIntervalTrack() {
@@ -806,9 +789,16 @@
                     player.src = data.url;
                     player.load();
                     player.onended = () => {
-                        if (searchResults.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * searchResults.length);
-                            playTrack(searchResults[randomIndex]);
+                        // When main track finishes, wait the configured interval delay,
+                        // then play the interval track once (if enabled and set).
+                        const enabled = document.getElementById('interval-enabled')?.checked;
+                        if (enabled && intervalSong) {
+                            setTimeout(() => {
+                                const stillEnabled = document.getElementById('interval-enabled')?.checked;
+                                if (stillEnabled && intervalSong) {
+                                    playIntervalTrack();
+                                }
+                            }, intervalDelayMs);
                         }
                     };
                     const playPromise = player.play();
