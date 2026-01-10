@@ -111,12 +111,35 @@
         let scheduleConfigs = [];
         const lastScheduleTriggers = {}; // { url: 'YYYY-MM-DD HH:MM' }
 
+        // Interval list configuration (names of files shown in Interval list)
+        let intervalListConfig = [];
+
         function loadScheduleConfigs() {
             try {
                 scheduleConfigs = JSON.parse(localStorage.getItem('scheduleConfigs') || '[]');
             } catch (_) {
                 scheduleConfigs = [];
             }
+        }
+
+        function loadIntervalListConfig() {
+            try {
+                intervalListConfig = JSON.parse(localStorage.getItem('intervalListConfig') || '[]');
+                if (!Array.isArray(intervalListConfig)) intervalListConfig = [];
+            } catch (_) {
+                intervalListConfig = [];
+            }
+        }
+
+        function saveIntervalListConfig() {
+            localStorage.setItem('intervalListConfig', JSON.stringify(intervalListConfig));
+        }
+
+        function removeIntervalEntry(filename) {
+            intervalListConfig = intervalListConfig.filter(name => name !== filename);
+            saveIntervalListConfig();
+            // Refresh only the interval list
+            loadSavedFiles();
         }
 
         
@@ -147,6 +170,7 @@
             }, 1000);
 
             loadScheduleConfigs();
+            loadIntervalListConfig();
 
             // Restore global schedule enabled flag
             const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
@@ -196,24 +220,41 @@
             try {
                 const response = await fetch('/api/files');
                 const files = await response.json();
-                renderFilesList('interval-files-list', files, 'interval');
+
+                // Initialize interval list config once with all files if empty
+                if (!intervalListConfig || intervalListConfig.length === 0) {
+                    intervalListConfig = files.map(f => f.title);
+                    saveIntervalListConfig();
+                }
+
+                renderIntervalFilesList(files);
                 renderScheduleFilesList(files);
             } catch (error) {
                 console.error('Error loading files:', error);
             }
         }
 
-        function renderFilesList(containerId, files, type) {
-            const container = document.getElementById(containerId);
+        // Interval list: shows only files currently in intervalListConfig.
+        // Deleting from this list removes the file only from the INTERVAL LIST (not from disk).
+        function renderIntervalFilesList(files) {
+            const container = document.getElementById('interval-files-list');
             if (!container) return;
 
-            if (files.length === 0) {
-                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
+            if (!files || files.length === 0 || !intervalListConfig || intervalListConfig.length === 0) {
+                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No interval tracks in list.</div>';
+                return;
+            }
+
+            const set = new Set(intervalListConfig);
+            const shownFiles = files.filter(f => set.has(f.title));
+
+            if (shownFiles.length === 0) {
+                container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No interval tracks in list.</div>';
                 return;
             }
 
             container.innerHTML = '';
-            files.forEach(file => {
+            shownFiles.forEach(file => {
                 const div = document.createElement('div');
                 div.style.display = 'flex';
                 div.style.justifyContent = 'space-between';
@@ -225,20 +266,25 @@
                 nameSpan.innerText = file.title;
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
-                nameSpan.onclick = () => selectSavedFile(file, type);
+                nameSpan.onclick = () => selectSavedFile(file, 'interval');
                 
                 const deleteBtn = document.createElement('button');
-                deleteBtn.innerText = '🗑️';
+                deleteBtn.innerText = '✖';
                 deleteBtn.style.padding = '2px 5px';
                 deleteBtn.style.background = 'transparent';
                 deleteBtn.style.border = 'none';
                 deleteBtn.style.cursor = 'pointer';
+                deleteBtn.title = 'Remove from interval list (file stays available)';
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
-                    // Delete from disk, then refresh lists.
-                    deleteSavedFile(file.title);
-                    // Also remove this row immediately from the current list view.
-                    div.remove();
+                    // If this file is currently the active intervalSong, clear it
+                    if (intervalSong && intervalSong.title === file.title) {
+                        intervalSong = null;
+                        localStorage.removeItem('intervalSong');
+                        const statusEl = document.getElementById('interval-status');
+                        if (statusEl) statusEl.innerText = '';
+                    }
+                    removeIntervalEntry(file.title);
                 };
                 
                 div.appendChild(nameSpan);
