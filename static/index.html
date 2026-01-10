@@ -377,10 +377,10 @@
                 deleteBtn.style.background = 'transparent';
                 deleteBtn.style.border = 'none';
                 deleteBtn.style.cursor = 'pointer';
-                deleteBtn.title = 'Remove from schedule list (file remains available)';
+                deleteBtn.title = 'Delete audio file from disk (removes from all lists)';
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
-                    deleteScheduleEntry(config.title, config.url);
+                    deleteSavedFile(config.title);
                 };
 
                 div.appendChild(enableCheckbox);
@@ -407,26 +407,6 @@
                 localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
                 document.getElementById('schedule-status').innerText = 'Selected: ' + file.title;
             }
-        }
-
-        // Remove track only from schedule list (not deleting the file from disk)
-        function deleteScheduleEntry(filename, url) {
-            // Remove from scheduleConfigs
-            if (scheduleConfigs && scheduleConfigs.length > 0) {
-                scheduleConfigs = scheduleConfigs.filter(
-                    c => !(c.title === filename && c.url === url)
-                );
-                saveScheduleConfigs();
-            }
-            // Clear currently selected scheduleSong if it was this file
-            if (scheduleSong && scheduleSong.title === filename && scheduleSong.url === url) {
-                scheduleSong = null;
-                localStorage.removeItem('scheduleSong');
-                const statusEl = document.getElementById('schedule-status');
-                if (statusEl) statusEl.innerText = '';
-            }
-            // Re-render schedule list based on current files
-            loadSavedFiles();
         }
 
         let intervalSong = null;
