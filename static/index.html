@@ -105,11 +105,24 @@
                     clock.innerText = now.toLocaleTimeString();
                 }
             }, 1000);
-            startScheduleChecker();
-            startIntervalTimer();
-            loadSavedFiles();
-            
-            // Restore from localStorage
+
+            // Restore simple settings from localStorage
+            const savedIntervalTime = localStorage.getItem('intervalTime');
+            if (savedIntervalTime) {
+                document.getElementById('interval-time').value = savedIntervalTime;
+            }
+
+            const savedIntervalEnabled = localStorage.getItem('intervalEnabled');
+            if (savedIntervalEnabled !== null) {
+                document.getElementById('interval-enabled').checked = savedIntervalEnabled === '1';
+            }
+
+            const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
+            if (savedScheduleEnabled !== null) {
+                document.getElementById('schedule-enabled').checked = savedScheduleEnabled === '1';
+            }
+
+            // Restore from localStorage: selected songs
             const savedInterval = localStorage.getItem('intervalSong');
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
@@ -121,13 +134,28 @@
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
             }
             
-            // Initialize schedule times
+            // Initialize schedule times (per-time settings)
             const savedTimes = JSON.parse(localStorage.getItem('scheduleTimes') || '[]');
             if (savedTimes.length === 0) {
                 addScheduleTime(); // Add one default time if none saved
             } else {
                 savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
             }
+
+            // Start timers/checkers AFTER restoring settings
+            startScheduleChecker();
+            startIntervalTimer();
+
+            // Load saved files for each category
+            loadSavedFiles();
+
+            // Persist enable/disable toggles
+            document.getElementById('interval-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('intervalEnabled', e.target.checked ? '1' : '0');
+            });
+            document.getElementById('schedule-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('scheduleEnabled', e.target.checked ? '1' : '0');
+            });
         };
 
         function addScheduleTime(value = '', enabled = true) {
@@ -506,13 +534,11 @@
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
+
+            // Persist current interval time as default
+            localStorage.setItem('intervalTime', seconds.toString());
             
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
-            intervalTimer = setInterval(() => {
+            intervalTimer = setInterval(() =&gt; {
                 const enabled = document.getElementById('interval-enabled').checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
                     console.log('Triggering interval play');
@@ -520,9 +546,9 @@
                 }
             }, seconds * 1000);
         }
-
+        
         // Add event listener to restart timer when value changes
-        document.getElementById('interval-time').addEventListener('change', () => {
+        document.getElementById('interval-time').addEventListener('change', () =&gt; {
             console.log('Interval time changed, restarting timer');
             startIntervalTimer();
         });
