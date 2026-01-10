@@ -53,7 +53,8 @@
             Loading saved files...
         </div>
         <div style="margin-top: 10px;">
-            Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
+            Interval (seconds): <input type="number" id="interval-time" value="180" min="1" max="6000" style="width: 80px; padding: 5px; border-radius: 5px;">
+            <span style="font-size: 0.75em; color: #aaa; margin-left: 5px;">(max 6000)</span>
         </div>
     </div>
 
@@ -673,12 +674,18 @@
 
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
-            const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
+            let seconds = parseInt(document.getElementById('interval-time').value) || 180;
+
+            // Enforce max 6000 seconds
+            if (seconds > 6000) {
+                seconds = 6000;
+                const input = document.getElementById('interval-time');
+                if (input) input.value = 6000;
+            } else if (seconds < 1) {
+                seconds = 1;
+                const input = document.getElementById('interval-time');
+                if (input) input.value = 1;
+            }
             
             intervalTimer = setInterval(() => {
                 const enabled = document.getElementById('interval-enabled').checked;
