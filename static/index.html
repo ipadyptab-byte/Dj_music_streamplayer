@@ -678,38 +678,57 @@
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
             if (!mainPlayer) return;
-            if (!mainPlayer.src || mainPlayer.paused) return;
 
             const wasPlaying = !mainPlayer.paused;
             const currentTrackEl = document.getElementById('current-track');
             const originalTitle = currentTrackEl ? currentTrackEl.innerText : '';
 
-            mainPlayer.pause();
+            // Pause main player only if it was playing
+            if (wasPlaying) {
+                mainPlayer.pause();
+            }
             isIntervalPlaying = true;
-            if (currentTrackEl) currentTrackEl.innerText = 'Interval Playing: ' + intervalSong.title;
+            if (currentTrackEl) currentTrackEl.innerText = 'Interval Playing: ' + (intervalSong ? intervalSong.title : '');
 
             try {
+                if (!intervalSong) {
+                    isIntervalPlaying = false;
+                    if (wasPlaying) {
+                        mainPlayer.play().catch(() =&gt; {});
+                    }
+                    if (currentTrackEl) currentTrackEl.innerText = originalTitle;
+                    return;
+                }
+
                 let audioUrl = intervalSong.url;
                 if (!intervalSong.isLocal) {
                     const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
                     const data = await response.json();
                     audioUrl = data.url;
                 }
-                if (!audioUrl) return;
+                if (!audioUrl) {
+                    isIntervalPlaying = false;
+                    if (wasPlaying) {
+                        mainPlayer.play().catch(() =&gt; {});
+                    }
+                    if (currentTrackEl) currentTrackEl.innerText = originalTitle;
+                    return;
+                }
+
                 const intervalAudio = new Audio(audioUrl);
 
-                const cleanup = () => {
+                const cleanup = () =&gt; {
                     isIntervalPlaying = false;
                     intervalAudio.pause();
                     intervalAudio.src = '';
                     if (wasPlaying) {
-                        mainPlayer.play().catch(() => {});
+                        mainPlayer.play().catch(() =&gt; {});
                     }
                     if (currentTrackEl) currentTrackEl.innerText = originalTitle;
                 };
                 intervalAudio.onended = cleanup;
-                intervalAudio.ontimeupdate = () => {
-                    if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                intervalAudio.ontimeupdate = () =&gt; {
+                    if (intervalAudio.duration &gt; 0 &amp;&amp; intervalAudio.currentTime &gt;= intervalAudio.duration) {
                         intervalAudio.ontimeupdate = null;
                         cleanup();
                     }
@@ -717,7 +736,9 @@
                 intervalAudio.play();
             } catch (error) {
                 isIntervalPlaying = false;
-                mainPlayer.play().catch(() => {});
+                if (wasPlaying) {
+                    mainPlayer.play().catch(() =&gt; {});
+                }
                 if (currentTrackEl) currentTrackEl.innerText = originalTitle;
             }
         }
