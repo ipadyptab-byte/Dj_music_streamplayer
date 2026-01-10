@@ -91,11 +91,10 @@
         <div id="schedule-files-list" style="margin-top: 5px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
             Loading saved files...
         </div>
-        <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center;">
-            <button onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
+        <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+           <cbutton onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
                 Save Schedule
-            </button>
-            <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954;"></span>
+          </  button    <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954;"></span>
         </div>
         </div>
 
@@ -231,6 +230,31 @@
                 renderScheduleFilesList(files);
             } catch (error) {
                 console.error('Error loading files:', error);
+            }
+        }
+
+        // Delete ALL uploaded audio files (used by "Clear Schedule (Delete All)" button)
+        async function clearScheduleTracks() {
+            if (!confirm('Delete ALL uploaded audio files from disk? This clears Schedule and Interval lists.')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/files');
+                const files = await response.json();
+                for (const file of files) {
+                    await fetch('/api/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: file.title })
+                    });
+                }
+                scheduleConfigs = [];
+                saveScheduleConfigs();
+                intervalListConfig = [];
+                saveIntervalListConfig();
+                loadSavedFiles();
+            } catch (error) {
+                console.error('Error clearing schedule tracks:', error);
             }
         }
 
