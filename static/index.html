@@ -118,24 +118,7 @@
             }
         }
 
-        function loadIntervalListConfig() {
-            try {
-                intervalListConfig = JSON.parse(localStorage.getItem('intervalListConfig') || '[]');
-            } catch (_) {
-                intervalListConfig = [];
-            }
-        }
-
-        function saveIntervalListConfig() {
-            localStorage.setItem('intervalListConfig', JSON.stringify(intervalListConfig));
-        }
-
-        function removeIntervalEntry(filename) {
-            intervalListConfig = intervalListConfig.filter(name => name !== filename);
-            saveIntervalListConfig();
-            // Refresh lists after change
-            loadSavedFiles();
-        }
+        
 
         function saveScheduleConfigs(showMessage = false) {
             localStorage.setItem('scheduleConfigs', JSON.stringify(scheduleConfigs));
@@ -221,10 +204,13 @@
 
         function renderFilesList(containerId, files, type) {
             const container = document.getElementById(containerId);
+            if (!container) return;
+
             if (files.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
                 return;
             }
+
             container.innerHTML = '';
             files.forEach(file => {
                 const div = document.createElement('div');
@@ -249,46 +235,6 @@
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
                     deleteSavedFile(file.title);
-                };
-                
-                div.appendChild(nameSpan);
-                div.appendChild(deleteBtn);
-                container.appendChild(div);
-            });
-        }
-
-            container.innerHTML = '';
-            files.forEach(file => {
-                const div = document.createElement('div');
-                div.style.display = 'flex';
-                div.style.justifyContent = 'space-between';
-                div.style.alignItems = 'center';
-                div.style.marginBottom = '5px';
-                div.style.fontSize = '0.85em';
-                
-                const nameSpan = document.createElement('span');
-                nameSpan.innerText = file.title;
-                nameSpan.style.cursor = 'pointer';
-                nameSpan.style.flex = '1';
-                nameSpan.onclick = () => selectSavedFile(file, 'interval');
-                
-                const deleteBtn = document.createElement('button');
-                deleteBtn.innerText = '✖';
-                deleteBtn.style.padding = '2px 5px';
-                deleteBtn.style.background = 'transparent';
-                deleteBtn.style.border = 'none';
-                deleteBtn.style.cursor = 'pointer';
-                deleteBtn.title = 'Remove from interval list (file remains available)';
-                deleteBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    // Just remove from the interval list view and clear intervalSong if it was this file
-                    if (intervalSong && intervalSong.title === file.title) {
-                        intervalSong = null;
-                        localStorage.removeItem('intervalSong');
-                        const statusEl = document.getElementById('interval-status');
-                        if (statusEl) statusEl.innerText = '';
-                    }
-                    div.remove();
                 };
                 
                 div.appendChild(nameSpan);
