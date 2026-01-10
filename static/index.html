@@ -77,13 +77,15 @@
         <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
             Loading saved files...
         </div>
+        <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center;">
+            <button onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
+                Save Schedule
+            </button>
+            <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954;"></span>
+        </div>
         <div style="margin-top: 10px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                 <span>Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.1em; color: #1db954;">00:00:00</span></span>
-                <button onclick="addScheduleTime()" style="padding: 2px 10px; font-size: 0.8em; width: auto;">+ Add Time</button>
-            </div>
-            <div id="schedule-times-container">
-                <!-- Time inputs will be added here -->
             </div>
         </div>
     </div>
@@ -108,8 +110,18 @@
             }
         }
 
-        function saveScheduleConfigs() {
+        function saveScheduleConfigs(showMessage = false) {
             localStorage.setItem('scheduleConfigs', JSON.stringify(scheduleConfigs));
+            if (showMessage) {
+                const el = document.getElementById('schedule-save-status');
+                if (el) {
+                    el.innerText = 'Schedule saved';
+                    el.style.color = '#1db954';
+                    setTimeout(() => {
+                        el.innerText = '';
+                    }, 3000);
+                }
+            }
         }
 
         // Initialize clock and state on load
@@ -124,6 +136,14 @@
             }, 1000);
 
             loadScheduleConfigs();
+
+            // Restore global schedule enabled flag
+            const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
+            if (savedScheduleEnabled !== null) {
+                const chk = document.getElementById('schedule-enabled');
+                if (chk) chk.checked = savedScheduleEnabled === 'true';
+            }
+
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
@@ -138,6 +158,14 @@
             if (savedSchedule) {
                 scheduleSong = JSON.parse(savedSchedule);
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
+            }
+
+            // Persist schedule-enabled checkbox changes
+            const scheduleEnableEl = document.getElementById('schedule-enabled');
+            if (scheduleEnableEl) {
+                scheduleEnableEl.addEventListener('change', (e) => {
+                    localStorage.setItem('scheduleEnabled', e.target.checked ? 'true' : 'false');
+                });
             }
         };
 
