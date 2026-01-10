@@ -235,7 +235,10 @@
                 deleteBtn.style.cursor = 'pointer';
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
+                    // Delete from disk, then refresh lists.
                     deleteSavedFile(file.title);
+                    // Also remove this row immediately from the current list view.
+                    div.remove();
                 };
                 
                 div.appendChild(nameSpan);
