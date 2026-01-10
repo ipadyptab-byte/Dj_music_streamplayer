@@ -110,9 +110,6 @@
         let scheduleConfigs = [];
         const lastScheduleTriggers = {}; // { url: 'YYYY-MM-DD HH:MM' }
 
-        // Interval list configuration (which files appear in the interval list)
-        let intervalListConfig = [];
-
         function loadScheduleConfigs() {
             try {
                 scheduleConfigs = JSON.parse(localStorage.getItem('scheduleConfigs') || '[]');
@@ -166,7 +163,6 @@
             }, 1000);
 
             loadScheduleConfigs();
-            loadIntervalListConfig();
 
             // Restore global schedule enabled flag
             const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
@@ -216,13 +212,6 @@
             try {
                 const response = await fetch('/api/files');
                 const files = await response.json();
-
-                // Initialize interval list config with all files on first load
-                if (!Array.isArray(intervalListConfig) || intervalListConfig.length === 0) {
-                    intervalListConfig = files.map(f => f.title);
-                    saveIntervalListConfig();
-                }
-
                 renderFilesList('interval-files-list', files, 'interval');
                 renderScheduleFilesList(files);
             } catch (error) {
@@ -230,27 +219,14 @@
             }
         }
 
-        // Interval list rendering (separate from schedule list)
         function renderFilesList(containerId, files, type) {
             const container = document.getElementById(containerId);
-            if (!container) return;
-
-            const isInterval = type === 'interval';
-
-            let shownFiles = files;
-            if (isInterval) {
-                // Only show files that are in the interval list config
-                const set = new Set(intervalListConfig);
-                shownFiles = files.filter(f => set.has(f.title));
-            }
-
-            if (!shownFiles || shownFiles.length === 0) {
+            if (files.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
                 return;
             }
-
             container.innerHTML = '';
-            shownFiles.forEach(file => {
+            files.forEach(file => {
                 const div = document.createElement('div');
                 div.style.display = 'flex';
                 div.style.justifyContent = 'space-between';
@@ -270,20 +246,10 @@
                 deleteBtn.style.background = 'transparent';
                 deleteBtn.style.border = 'none';
                 deleteBtn.style.cursor = 'pointer';
-
-                if (isInterval) {
-                    // For interval list: only remove from interval list, do NOT delete the file itself
-                    deleteBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        removeIntervalEntry(file.title);
-                    };
-                } else {
-                    // For any non-interval usage (if added in future): delete file from disk
-                    deleteBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        deleteSavedFile(file.title);
-                    };
-                }
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteSavedFile(file.title);
+                };
                 
                 div.appendChild(nameSpan);
                 div.appendChild(deleteBtn);
