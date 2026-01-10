@@ -69,6 +69,10 @@
             <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
         </div>
         <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+        <div style="margin-top: 8px; font-size: 0.8em;">
+            Time for selected track (YouTube or uploaded): 
+            <input type="time" id="schedule-song-time" style="padding: 3px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;">
+        </div>
         <div style="margin-top: 10px; display: flex; gap: 5px;">
             <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
             <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
@@ -153,6 +157,18 @@
             if (savedSchedule) {
                 scheduleSong = JSON.parse(savedSchedule);
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
+            }
+
+            // Restore time for selected track schedule
+            const savedSongTime = localStorage.getItem('scheduleSongTime');
+            const timeInput = document.getElementById('schedule-song-time');
+            if (timeInput && savedSongTime) {
+                timeInput.value = savedSongTime;
+            }
+            if (timeInput) {
+                timeInput.addEventListener('change', (e) => {
+                    localStorage.setItem('scheduleSongTime', e.target.value || '');
+                });
             }
 
             // Persist schedule-enabled checkbox changes
@@ -453,32 +469,49 @@
             function runChecker() {
                 const globalEnabled = document.getElementById('schedule-enabled').checked;
                 if (!globalEnabled) return;
-                if (!scheduleConfigs || scheduleConfigs.length === 0) return;
-
                 const now = new Date();
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                 const dateKey = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
-                scheduleConfigs.forEach(config => {
-                    if (!config.enabled || !config.time || !config.url) return;
-                    if (config.time !== currentTime) return;
-                    if (isIntervalPlaying) return;
+                // 1) Per-file schedules (uploaded files)
+                if (scheduleConfigs && scheduleConfigs.length > 0) {
+                    scheduleConfigs.forEach(config => {
+                        if (!config.enabled || !config.time || !config.url) return;
+                        if (config.time !== currentTime) return;
+                        if (isIntervalPlaying) return;
 
-                    const key = `${dateKey} ${currentTime}`;
-                    if (lastScheduleTriggers[config.url] === key) {
-                        // Already played this track for this minute today
-                        return;
-                    }
+                        const key = `${config.url}|${dateKey} ${currentTime}`;
+                        if (lastScheduleTriggers[key]) {
+                            // Already played this track for this minute today
+                            return;
+                        }
 
-                    console.log('Triggering scheduled play at:', currentTime, 'for track:', config.title);
-                    lastScheduleTriggers[config.url] = key;
+                        console.log('Triggering scheduled play at:', currentTime, 'for track:', config.title);
+                        lastScheduleTriggers[key] = true;
 
-                    playScheduleTrack({
-                        title: config.title,
-                        url: config.url,
-                        isLocal: config.isLocal
+                        playScheduleTrack({
+                            title: config.title,
+                            url: config.url,
+                            isLocal: config.isLocal
+                        });
                     });
-                });
+                }
+
+                // 2) Single selected track schedule (YouTube or uploaded)
+                const selectedTime = localStorage.getItem('scheduleSongTime');
+                if (scheduleSong && selectedTime && selectedTime === currentTime && !isIntervalPlaying) {
+                    const keySel = `selected|${scheduleSong.url}|${dateKey} ${currentTime}`;
+                    if (!lastScheduleTriggers[keySel]) {
+                        console.log('Triggering scheduled play for selected track at:', currentTime, 'title:', scheduleSong.title);
+                        lastScheduleTriggers[keySel] = true;
+
+                        playScheduleTrack({
+                            title: scheduleSong.title,
+                            url: scheduleSong.url,
+                            isLocal: scheduleSong.isLocal
+                        });
+                    }
+                }
             }
             setInterval(runChecker, 1000);
         }
