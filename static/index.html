@@ -126,6 +126,58 @@ v>
         <audio id="audio-player" controls></audio>
     </div>
 
+    <!-- Fallback simple search implementation to ensure search box always works -->
+    <script>
+        // Simple, independent search() to guarantee the top search box works
+        function search() {
+            var input = document.getElementById('query');
+            var resultsDiv = document.getElementById('results');
+            if (!input || !resultsDiv) return;
+            var q = (input.value || '').trim();
+            if (!q) {
+                resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#aaa;">Please enter something to search.</div>';
+                return;
+            }
+            resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#aaa;">Searching...</div>';
+            fetch('/api/search?q=' + encodeURIComponent(q))
+                .then(function (res) { return res.json(); })
+                .then(function (results) {
+                    if (!Array.isArray(results) || results.length === 0) {
+                        resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#aaa;">No results found.</div>';
+                        return;
+                    }
+                    resultsDiv.innerHTML = '';
+                    for (var i = 0; i < results.length; i++) {
+                        var track = results[i];
+                        var row = document.createElement('div');
+                        row.className = 'track';
+                        row.onclick = (function (t) {
+                            return function () {
+                                if (typeof playTrack === 'function') {
+                                    playTrack(t);
+                                }
+                            };
+                        })(track);
+                        var img = document.createElement('img');
+                        img.src = track.thumbnail;
+                        img.alt = 'thumbnail';
+                        var info = document.createElement('div');
+                        info.className = 'track-info';
+                        var titleDiv = document.createElement('div');
+                        titleDiv.textContent = track.title;
+                        info.appendChild(titleDiv);
+                        row.appendChild(img);
+                        row.appendChild(info);
+                        resultsDiv.appendChild(row);
+                    }
+                    resultsDiv.scrollTop = 0;
+                })
+                .catch(function () {
+                    resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#ff6666;">Error searching.</div>';
+                });
+        }
+    </script>
+
     <script>
         let scheduleConfigs = [];
         const lastScheduleTriggers = {};
