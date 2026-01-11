@@ -157,6 +157,22 @@
                 if (chk) chk.checked = (savedScheduleEnabled === 'true');
             }
 
+            // Restore interval enabled flag
+            const savedIntervalEnabled = localStorage.getItem('intervalEnabled');
+            if (savedIntervalEnabled !== null) {
+                const chkInt = document.getElementById('interval-enabled');
+                if (chkInt) chkInt.checked = (savedIntervalEnabled === 'true');
+            }
+
+            // Restore interval time
+            const savedIntervalTime = localStorage.getItem('intervalTimeSeconds');
+            if (savedIntervalTime) {
+                const intInput = document.getElementById('interval-time');
+                if (intInput) intInput.value = savedIntervalTime;
+            }
+            // Ensure interval delay is configured from restored value
+            startIntervalTimer();
+
             const savedInterval = localStorage.getItem('intervalSong');
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
@@ -187,6 +203,28 @@
             if (scheduleEnableEl) {
                 scheduleEnableEl.addEventListener('change', (e) => {
                     localStorage.setItem('scheduleEnabled', e.target.checked ? 'true' : 'false');
+                });
+            }
+
+            // Persist interval-enabled checkbox changes and auto-schedule if main is playing
+            const intervalEnableEl = document.getElementById('interval-enabled');
+            if (intervalEnableEl) {
+                intervalEnableEl.addEventListener('change', (e) => {
+                    const enabled = e.target.checked;
+                    localStorage.setItem('intervalEnabled', enabled ? 'true' : 'false');
+
+                    // If enabling while a main track is already playing and an intervalSong exists,
+                    // schedule the interval trigger immediately according to current delay.
+                    const player = document.getElementById('audio-player');
+                    if (enabled && intervalSong && player && !player.paused) {
+                        scheduleIntervalForMainTrack();
+                    } else {
+                        // If disabling, clear any pending interval timeout
+                        if (intervalTimeout) {
+                            clearTimeout(intervalTimeout);
+                            intervalTimeout = null;
+                        }
+                    }
                 });
             }
 
@@ -604,7 +642,16 @@
                     intervalSong.isLocal = false;
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
                     if (status) status.innerText = 'Interval song set: ' + intervalSong.title;
-                    startIntervalTimer();
+
+                    // If a main track is already playing and interval is enabled, schedule trigger
+                    const player = document.getElementById('audio-player');
+                    const enabled = document.getElementById('interval-enabled')?.checked;
+                    if (player && !player.paused && enabled) {
+                        scheduleIntervalForMainTrack();
+                    } else {
+                        // Ensure delay is configured
+                        startIntervalTimer();
+                    }
                 } else {
                     if (status) status.innerText = 'No songs found for interval.';
                 }
@@ -632,9 +679,7 @@
                     method: 'POST',
                     body: formData
                 });
-           
-
-                    if (!response.ok) throw new Error('Upload failed');
+                if (!response.ok) throw new Error('Upload failed');
                 const data = await response.json();
                 if (data.url) {
                     intervalSong = {
@@ -645,14 +690,23 @@
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
                     if (status) status.innerText = '✅ Interval file set: ' + data.title;
                     loadSavedFiles();
-                    // Start timer chain for newly set interval track
-                    startIntervalTimer();
+
+                    // If main is already playing and interval is enabled, schedule trigger immediately
+                    const player = document.getElementById('audio-player');
+                    const enabled = document.getElementById('interval-enabled')?.checked;
+                    if (player && !player.paused && enabled) {
+                        scheduleIntervalForMainTrack();
+                    } else {
+                        startIntervalTimer();
+                    }
                 }
             } catch (error) {
                 if (status) {
                     status.innerText = '❌ Error: ' + error.message;
                     status.style.color = '#ff4444';
                 }
+            }
+        }
             }
         }
 
@@ -673,12 +727,20 @@
         }
 
         function startIntervalTimer() {
-            // Just (re)read the delay value; scheduling happens when a main track starts.
+            // (Re)read the delay value; actual scheduling is tied to main track + interval settings.
             configureIntervalDelay();
         }
 
         document.getElementById('interval-time').addEventListener('change', () => {
             configureIntervalDelay();
+            // Persist interval time setting
+            localStorage.setItem('intervalTimeSeconds', String(parseInt(document.getElementById('interval-time').value) || 180));
+            // If a main track is currently playing and interval is enabled + song set, reschedule
+            const player = document.getElementById('audio-player');
+            const enabled = document.getElementById('interval-enabled')?.checked;
+            if (player && !player.paused && enabled && intervalSong) {
+                scheduleIntervalForMainTrack();
+            }
         });
 
         async function playIntervalTrack() {
