@@ -26,83 +26,99 @@
         <button onclick="search()">Search</button>
     </div>
 
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Interval Settings</h3>
-        <label>
-            <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
-            Interval Tracks
-        </div>
-        <div id="interval-files-list" style="margin-top: 5px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 10px;">
-            Interval (seconds): <input type="number" id="interval-time" value="180" min="1" max="6000" style="width: 80px; padding: 5px; border-radius: 5px;">
-            <span style="font-size: 0.75em; color: #aaa; margin-left: 5px;">(max 6000)</span>
-        </div>
-    </div>
+    <!-- Main layout: controls on the left, search results on the right -->
+    <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; width: 100%; max-width: 1100px;">
 
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Schedule Play (Bhajan/Prayer)</h3>
-        <label>
-            <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 8px; font-size: 0.8em;">
-            Time for selected track (YouTube or uploaded): 
-            <input type="time" id="schedule-song-time" style="padding: 3px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;">
-        </div>
-        <div style="margin-top: 6px; font-size: 0.8em;">
-            Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.0em; color: #1db954;">00:00:00</span>
-        </div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
-            Schedule Tracks
-        </div>
-        <div id="schedule-files-list" style="margin-top: 5px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
-            <button onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
-                Save Schedule
-            </button>
-            <button onclick="clearScheduleTracks()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #e74c3c; color: white; border: none; cursor: pointer;">
-                Clear Schedule (Delete All)
-            </button>
-            <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954; flex: 1; text-align: right;"></span>
-        </div>
-    </div>
+        <!-- Left column: Interval + Schedule cards -->
+        <div style="flex: 1 1 320px; max-width: 520px; display: flex; flex-direction: column; gap: 15px;">
 
-    <div class="results" id="results"></div>
+            <div style="background: radial-gradient(circle at top left, #333 0, #222 40%, #111 100%); padding: 15px; border-radius: 10px; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.4); border: 1px solid #444;">
+                <h3 style="margin-top: 0; margin-bottom: 8px;">Interval Settings</h3>
+                <label>
+                    <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
+                </div>
+                <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
+                    Interval Tracks
+                </div>
+                <div id="interval-files-list" style="margin-top: 5px; max-height: 160px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px; background:#1a1a1a;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 10px;">
+                    Interval (seconds): <input type="number" id="interval-time" value="180" min="1" max="6000" style="width: 80px; padding: 5px; border-radius: 5px;">
+                    <span style="font-size: 0.75em; color: #aaa; margin-left: 5px;">(max 6000)</span>
+                </div>
+            </div>
+
+            <div style="background: radial-gradient(circle at top left, #333 0, #222 40%, #111 100%); padding: 15px; border-radius: 10px; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.4); border: 1px solid #444;">
+                <h3 style="margin-top: 0; margin-bottom: 8px;">Schedule Play (Bhajan/Prayer)</h3>
+                <label>
+                    <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
+                </div>
+                <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 8px; font-size: 0.8em;">
+                    Time for selected track (YouTube or uploaded): 
+                    <input type="time" id="schedule-song-time" style="padding: 3px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;">
+                </div>
+                <div style="margin-top: 6px; font-size: 0.8em;">
+                    Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.0em; color: #1db954;">00:00:00</span>
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div style="margin-top: 10px; font-size: 0.85em; font-weight: bold;">
+                    Schedule Tracks
+                </div>
+                <div id="schedule-files-list" style="margin-top: 5px; max-height: 160px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px; background:#1a1a1a;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 5px; display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+                    <button onclick="saveScheduleConfigs(true)" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #1db954; color: white; border: none; cursor: pointer;">
+                        Save Schedule
+                    </button>
+                    <button onclick="clearScheduleTracks()" style="padding: 4px 10px; font-size: 0.8em; border-radius: 5px; background: #e74c3c; color: white; border: none; cursor: pointer;">
+                        Clear Schedule (Delete All)
+                    </button>
+                    <span id="schedule-save-status" style="font-size: 0.8em; color: #1db954; flex: 1; text-align: right;"></span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right column: Search results -->
+        <div style="flex: 1 1 320px; min-width: 320px; max-width: 540px;">
+            <div style="background: radial-gradient(circle at top left, #333 0, #222 40%, #111 100%); padding: 15px; border-radius: 10px; width: 100%; box-shadow: 0 2px 8px rgba(0,0,0,0.4); border: 1px solid #444; max-height: 420px; overflow: hidden; display: flex; flex-direction: column;">
+                <h3 style="margin-top:0; margin-bottom:8px;">Search Results</h3>
+                <div class="results" id="results" style="flex: 1 1 auto; overflow-y: auto; border: 1px solid #444; border-radius: 5px; padding: 5px; background:#1a1a1a;"></div>
+            </div>
+        </div>
+
+    </div>
 
     <div class="player-container">
         <div id="current-track">No track selected</div>
@@ -268,6 +284,9 @@
                 nameSpan.innerText = file.title;
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
+                nameSpan.style.overflow = 'hidden';
+                nameSpan.style.textOverflow = 'ellipsis';
+                nameSpan.style.whiteSpace = 'nowrap';
                 nameSpan.onclick = () => selectSavedFile(file, 'interval');
 
                 const deleteBtn = document.createElement('button');
@@ -305,6 +324,9 @@
                 div.appendChild(deleteBtn);
                 container.appendChild(div);
             });
+
+            // Always scroll to the last item (bottom of the list)
+            container.scrollTop = container.scrollHeight;
         }
 
         function renderScheduleFilesList(files) {
@@ -357,6 +379,9 @@
                 nameSpan.innerText = config.title;
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
+                nameSpan.style.overflow = 'hidden';
+                nameSpan.style.textOverflow = 'ellipsis';
+                nameSpan.style.whiteSpace = 'nowrap';
                 nameSpan.onclick = () => {
                     scheduleSong = {
                         title: config.title,
@@ -410,6 +435,9 @@
 
                 container.appendChild(div);
             });
+
+            // Scroll to the last schedule item
+            container.scrollTop = container.scrollHeight;
         }
 
         async function clearScheduleTracks() {
