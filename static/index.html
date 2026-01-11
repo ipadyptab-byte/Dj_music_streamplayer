@@ -248,6 +248,34 @@ v>
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
+
+            // Keep interval timing synchronized with the main player state
+            const mainPlayer = document.getElementById('audio-player');
+            if (mainPlayer) {
+                // Whenever main player starts/resumes, (re)schedule interval trigger if enabled
+                mainPlayer.addEventListener('play', () => {
+                    const enabled = document.getElementById('interval-enabled')?.checked;
+                    if (enabled && intervalSong) {
+                        scheduleIntervalForMainTrack();
+                    }
+                });
+
+                // Whenever main player pauses or stops, cancel any pending interval trigger
+                mainPlayer.addEventListener('pause', () => {
+                    if (intervalTimeout) {
+                        clearTimeout(intervalTimeout);
+                        intervalTimeout = null;
+                    }
+                });
+
+                // Defensive: when main finishes naturally (onended), clear any pending interval
+                mainPlayer.addEventListener('ended', () => {
+                    if (intervalTimeout) {
+                        clearTimeout(intervalTimeout);
+                        intervalTimeout = null;
+                    }
+                });
+            }
         };
 
         async function loadSavedFiles() {
