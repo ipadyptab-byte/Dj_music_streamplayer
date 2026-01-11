@@ -400,9 +400,10 @@ v>
                         url: file.url,
                         isLocal: true,
                         enabled: true,
-                        time: ''
+                        times: []   // multiple schedule times per track
                     });
-                }
+                } else {
+                    // Backward compatibility: migrate}
             });
 
             const titles = new Set(files.map(f => f.title + '|' + f.url));
@@ -411,12 +412,26 @@ v>
 
             container.innerHTML = '';
             scheduleConfigs.forEach((config, index) => {
+                // Ensure times array exists (for backward compatibility)
+                if (!Array.isArray(config.times)) {
+                    config.times = [];
+                    if (config.time) {
+                        config.times.push(config.time);
+                        delete config.time;
+                    }
+                }
+
                 const div = document.createElement('div');
                 div.style.display = 'flex';
-                div.style.alignItems = 'center';
-                div.style.gap = '8px';
-                div.style.marginBottom = '5px';
+                div.style.flexDirection = 'column';
+                div.style.gap = '4px';
+                div.style.marginBottom = '6px';
                 div.style.fontSize = '0.85em';
+
+                const topRow = document.createElement('div');
+                topRow.style.display = 'flex';
+                topRow.style.alignItems = 'center';
+                topRow.style.gap = '8px';
 
                 const enableCheckbox = document.createElement('input');
                 enableCheckbox.type = 'checkbox';
@@ -445,20 +460,6 @@ v>
                     if (el) el.innerText = 'Selected: ' + config.title;
                 };
 
-                const timeInput = document.createElement('input');
-                timeInput.type = 'time';
-                timeInput.value = config.time || '';
-                timeInput.style.flex = '0 0 90px';
-                timeInput.style.padding = '3px';
-                timeInput.style.borderRadius = '5px';
-                timeInput.style.background = '#333';
-                timeInput.style.color = 'white';
-                timeInput.style.border = '1px solid #444';
-                timeInput.onchange = () => {
-                    scheduleConfigs[index].time = timeInput.value;
-                    saveScheduleConfigs();
-                };
-
                 const deleteBtn = document.createElement('button');
                 deleteBtn.innerText = '🗑️';
                 deleteBtn.style.padding = '2px 5px';
@@ -480,10 +481,79 @@ v>
                     }
                 };
 
-                div.appendChild(enableCheckbox);
-                div.appendChild(nameSpan);
-                div.appendChild(timeInput);
-                div.appendChild(deleteBtn);
+                topRow.appendChild(enableCheckbox);
+                topRow.appendChild(nameSpan);
+                topRow.appendChild(deleteBtn);
+
+                const timesRow = document.createElement('div');
+                timesRow.style.display = 'flex';
+                timesRow.style.flexWrap = 'wrap';
+                timesRow.style.gap = '4px';
+
+                const renderTimes = () => {
+                    timesRow.innerHTML = '';
+                    config.times.forEach((timeValue, tIndex) => {
+                        const timeWrapper = document.createElement('div');
+                        timeWrapper.style.display = 'flex';
+                        timeWrapper.style.alignItems = 'center';
+                        timeWrapper.style.gap = '2px';
+
+                        const timeInput = document.createElement('input');
+                        timeInput.type = 'time';
+                        timeInput.value = timeValue || '';
+                        timeInput.style.flex = '0 0 90px';
+                        timeInput.style.padding = '3px';
+                        timeInput.style.borderRadius = '5px';
+                        timeInput.style.background = '#333';
+                        timeInput.style.color = 'white';
+                        timeInput.style.border = '1px solid #444';
+                        timeInput.onchange = () => {
+                            config.times[tIndex] = timeInput.value;
+                            saveScheduleConfigs();
+                        };
+
+                        const removeBtn = document.createElement('button');
+                        removeBtn.innerText = '✖';
+                        removeBtn.style.padding = '0 4px';
+                        removeBtn.style.background = 'transparent';
+                        removeBtn.style.border = 'none';
+                        removeBtn.style.cursor = 'pointer';
+                        removeBtn.title = 'Remove this time';
+                        removeBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            config.times.splice(tIndex, 1);
+                            saveScheduleConfigs();
+                            renderTimes();
+                        };
+
+                        timeWrapper.appendChild(timeInput);
+                        timeWrapper.appendChild(removeBtn);
+                        timesRow.appendChild(timeWrapper);
+                    });
+
+                    const addBtn = document.createElement('button');
+                    addBtn.innerText = '+ Time';
+                    addBtn.style.padding = '2px 6px';
+                    addBtn.style.fontSize = '0.75em';
+                    addBtn.style.borderRadius = '5px';
+                    addBtn.style.border = '1px solid #555';
+                    addBtn.style.background = '#2c3e50';
+                    addBtn.style.color = '#ecf0f1';
+                    addBtn.style.cursor = 'pointer';
+                    addBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        config.times.push('');
+                        saveScheduleConfigs();
+                        renderTimes();
+                    };
+
+                    timesRow.appendChild(addBtn);
+                };
+
+                renderTimes();
+
+                div.appendChild(topRow);
+                div.appendChild(timesRow);
 
                 container.appendChild(div);
             });
@@ -613,22 +683,29 @@ v>
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
                 const dateKey = now.toISOString().slice(0, 10);
 
+                // 1) Per-file schedules (uploaded files) with multiple times per track
                 scheduleConfigs.forEach(config => {
-                    if (!config.enabled || !config.time || !config.url) return;
-                    if (config.time !== currentTime) return;
+                    if (!config.enabled || !config.url) return;
+                    if (!Array.isArray(config.times) || config.times.length === 0) return;
                     if (isIntervalPlaying) return;
 
-                    const key = `${config.url}|${dateKey} ${currentTime}`;
-                    if (lastScheduleTriggers[key]) return;
+                    config.times.forEach(timeValue => {
+                        if (!timeValue) return;
+                        if (timeValue !== currentTime) return;
 
-                    lastScheduleTriggers[key] = true;
-                    playScheduleTrack({
-                        title: config.title,
-                        url: config.url,
-                        isLocal: config.isLocal
+                        const key = `${config.url}|${timeValue}|${dateKey}`;
+                        if (lastScheduleTriggers[key]) return;
+
+                        lastScheduleTriggers[key] = true;
+                        playScheduleTrack({
+                            title: config.title,
+                            url: config.url,
+                            isLocal: config.isLocal
+                        });
                     });
                 });
 
+                // 2) Single selected track schedule (existing behavior)
                 const selectedTime = localStorage.getItem('scheduleSongTime');
                 if (scheduleSong && selectedTime && selectedTime === currentTime && !isIntervalPlaying) {
                     const keySel = `selected|${scheduleSong.url}|${dateKey} ${currentTime}`;
