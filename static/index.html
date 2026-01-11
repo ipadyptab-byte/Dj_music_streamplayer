@@ -225,6 +225,55 @@ v>
                 }
             });
         }
+
+        // Simple, independent uploadScheduleFile() so the Schedule "Upload & Set" button always works
+        function uploadScheduleFile() {
+            var fileInput = document.getElementById('schedule-file');
+            var status = document.getElementById('schedule-status');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                alert('Please select a file first.');
+                return;
+            }
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+            var formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            fetch('/api/upload?type=schedule', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data || !data.url) {
+                    if (status) {
+                        status.innerText = 'Upload failed.';
+                        status.style.color = '#ff4444';
+                    }
+                    return;
+                }
+                // Save as current scheduleSong in localStorage for later use
+                var songData = { title: data.title, url: data.url, isLocal: true };
+                try {
+                    localStorage.setItem('scheduleSong', JSON.stringify(songData));
+                } catch (e) {}
+                if (status) {
+                    status.innerText = '✅ File uploaded and set: ' + data.title;
+                    status.style.color = '#1db954';
+                }
+                if (typeof loadSavedFiles === 'function') {
+                    loadSavedFiles();
+                }
+            })
+            .catch(function (err) {
+                console.error('Fallback uploadScheduleFile error:', err);
+                if (status) {
+                    status.innerText = '❌ Error uploading schedule file.';
+                    status.style.color = '#ff4444';
+                }
+            });
+        }
     </script>
 
     <script>
