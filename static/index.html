@@ -729,6 +729,8 @@
                     intervalAudio.src = '';
                     if (wasPlaying) {
                         mainPlayer.play().catch(() => {});
+                        // Main track is running again; schedule the next interval trigger
+                        scheduleIntervalForMainTrack();
                     }
                     if (currentTrackEl) currentTrackEl.innerText = originalTitle;
                 };
@@ -744,6 +746,8 @@
                 isIntervalPlaying = false;
                 if (wasPlaying) {
                     mainPlayer.play().catch(() => {});
+                    // In case of error but main should continue, still schedule next interval
+                    scheduleIntervalForMainTrack();
                 }
                 if (currentTrackEl) currentTrackEl.innerText = originalTitle;
             }
@@ -777,6 +781,24 @@
             }
         }
 
+        // Schedule an interval play relative to the currently playing main track
+        function scheduleIntervalForMainTrack() {
+            // Clear any previous timeout tied to an older main track
+            if (intervalTimeout) {
+                clearTimeout(intervalTimeout);
+                intervalTimeout = null;
+            }
+            const enabled = document.getElementById('interval-enabled')?.checked;
+            if (!enabled || !intervalSong) return;
+
+            intervalTimeout = setTimeout(() => {
+                const stillEnabled = document.getElementById('interval-enabled')?.checked;
+                if (stillEnabled && intervalSong) {
+                    playIntervalTrack();
+                }
+            }, intervalDelayMs);
+        }
+
         async function playTrack(track) {
             const player = document.getElementById('audio-player');
             const currentTrackEl = document.getElementById('current-track');
@@ -794,28 +816,18 @@
                             const randomIndex = Math.floor(Math.random() * searchResults.length);
                             playTrack(searchResults[randomIndex]);
                         }
+                        // When the main track sequence ends, clear any pending interval timeout
+                        if (intervalTimeout) {
+                            clearTimeout(intervalTimeout);
+                            intervalTimeout = null;
+                        }
                     };
                     const playPromise = player.play();
                     if (playPromise !== undefined) {
                         playPromise.then(() => {
                             if (currentTrackEl) currentTrackEl.innerText = 'Playing: ' + track.title;
-
-                            // Schedule interval track AFTER main track has started.
-                            const enabled = document.getElementById('interval-enabled')?.checked;
-                            if (enabled && intervalSong) {
-                                // Clear any previous interval timeout tied to an older main track
-                                if (intervalTimeout) {
-                                    clearTimeout(intervalTimeout);
-                                    intervalTimeout = null;
-                                }
-                                intervalTimeout = setTimeout(() => {
-                                    const stillEnabled = document.getElementById('interval-enabled')?.checked;
-                                    if (stillEnabled && intervalSong) {
-                                        playIntervalTrack();
-                                    }
-                                }, intervalDelayMs);
-                            }
-
+                            // After the main track has started, schedule the first interval trigger
+                            scheduleIntervalForMainTrack();
                         }).catch(() => {
                             setTimeout(() => {
                                 player.play().catch(() => {
