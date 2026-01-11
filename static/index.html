@@ -236,10 +236,14 @@ v>
                     if (enabled && intervalSong && player && !player.paused) {
                         scheduleIntervalForMainTrack();
                     } else {
-                        // If disabling, clear any pending interval timeout
+                        // If disabling, clear any pending interval triggers
                         if (intervalTimeout) {
                             clearTimeout(intervalTimeout);
                             intervalTimeout = null;
+                        }
+                        if (intervalTimer) {
+                            clearInterval(intervalTimer);
+                            intervalTimer = null;
                         }
                     }
                 });
@@ -765,7 +769,8 @@ v>
             }
         }
 
-        // Interval timer: delay AFTER main track STARTS, then play interval track once.
+        // Interval timer: simple repeating timer independent of main track time,
+        // but playIntervalTrack will pause/resume the main player when needed.
         // The delay is configured from the "Interval (seconds)" input.
         function configureIntervalDelay() {
             let seconds = parseInt(document.getElementById('interval-time').value) || 180;
@@ -782,19 +787,27 @@ v>
         }
 
         function startIntervalTimer() {
-            // (Re)read the delay value; actual scheduling is tied to main track + interval settings.
             configureIntervalDelay();
+            if (intervalTimer) {
+                clearInterval(intervalTimer);
+                intervalTimer = null;
+            }
+            intervalTimer = setInterval(() => {
+                const enabled = document.getElementById('interval-enabled')?.checked;
+                if (enabled && intervalSong && !isIntervalPlaying) {
+                    playIntervalTrack();
+                }
+            }, intervalDelayMs);
         }
 
         document.getElementById('interval-time').addEventListener('change', () => {
             configureIntervalDelay();
             // Persist interval time setting
             localStorage.setItem('intervalTimeSeconds', String(parseInt(document.getElementById('interval-time').value) || 180));
-            // If a main track is currently playing and interval is enabled + song set, reschedule
-            const player = document.getElementById('audio-player');
+            // Restart the interval timer with the new delay if interval is enabled
             const enabled = document.getElementById('interval-enabled')?.checked;
-            if (player && !player.paused && enabled && intervalSong) {
-                scheduleIntervalForMainTrack();
+            if (enabled && intervalSong) {
+                startIntervalTimer();
             }
         });
 
@@ -898,22 +911,13 @@ v>
             }
         }
 
-        // Schedule an interval play relative to the currently playing main track
+        // For compatibility: whenever called, simply restart the repeating interval timer
+        // if interval is enabled and an intervalSong is set.
         function scheduleIntervalForMainTrack() {
-            // Clear any previous timeout tied to an older main track
-            if (intervalTimeout) {
-                clearTimeout(intervalTimeout);
-                intervalTimeout = null;
-            }
             const enabled = document.getElementById('interval-enabled')?.checked;
-            if (!enabled || !intervalSong) return;
-
-            intervalTimeout = setTimeout(() => {
-                const stillEnabled = document.getElementById('interval-enabled')?.checked;
-                if (stillEnabled && intervalSong) {
-                    playIntervalTrack();
-                }
-            }, intervalDelayMs);
+            if (enabled && intervalSong) {
+                startIntervalTimer();
+            }
         }
 
         async function playTrack(track) {
