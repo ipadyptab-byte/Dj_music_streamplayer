@@ -46,7 +46,7 @@ attached <!DOCTYPE html>
                     <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
                     <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
                 </div>
-                <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954; display:block; max-width:100%; white-space:normal; word-break:break-all; overflow-wrap:anywhere;"></div>
                 <div style="margin-top: 10px; display: flex; gap: 5px;">
                     <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
                     <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
@@ -78,7 +78,8 @@ attached <!DOCTYPE html>
                     <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
                     <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
                 </div>
-                <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+                <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954; display:block; max-width:100%; white-space:normal; word-break:break-all; overflow-wrap:anywhe;"></rediv>
+v>
                 <div style="margin-top: 8px; font-size: 0.8em;">
                     Time for selected track (YouTube or uploaded): 
                     <input type="time" id="schedule-song-time" style="padding: 3px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;">
