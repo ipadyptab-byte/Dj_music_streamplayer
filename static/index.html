@@ -130,12 +130,13 @@ v>
         let scheduleConfigs = [];
         const lastScheduleTriggers = {};
         let intervalSong = null;
-        let intervalTimer = null;          // legacy, kept for compatibility
-        let intervalTimeout = null;        // timeout handle for interval trigger relative to main track
+        let intervalTimer = null;          // repeating interval timer
+        let intervalTimeout = null;        // legacy timeout handle (may be unused)
         let intervalDelayMs = 180000;      // current interval delay in ms
         let isIntervalPlaying = false;
         let scheduleSong = null;
         let searchResults = [];
+        let globalVolume = 1.0;            // shared volume for main, interval, and schedule tracks
 
         function loadScheduleConfigs() {
             try {
@@ -167,6 +168,15 @@ v>
             }, 1000);
 
             loadScheduleConfigs();
+
+            // Restore global volume (applied to main player and all created Audio objects)
+            const savedVolume = localStorage.getItem('globalVolume');
+            if (savedVolume !== null) {
+                const v = parseFloat(savedVolume);
+                if (!isNaN(v)) {
+                    globalVolume = Math.min(1, Math.max(0, v));
+                }
+            }
 
             const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
             if (savedScheduleEnabled !== null) {
@@ -256,6 +266,15 @@ v>
             // Keep interval timing synchronized with the main player state
             const mainPlayer = document.getElementById('audio-player');
             if (mainPlayer) {
+                // Apply restored global volume to main player
+                mainPlayer.volume = globalVolume;
+
+                // Persist global volume when user changes it on the main player
+                mainPlayer.addEventListener('volumechange', () => {
+                    globalVolume = mainPlayer.volume;
+                    localStorage.setItem('globalVolume', String(globalVolume));
+                });
+
                 // Whenever main player starts/resumes, (re)schedule interval trigger if enabled
                 mainPlayer.addEventListener('play', () => {
                     const enabled = document.getElementById('interval-enabled')?.checked;
@@ -660,6 +679,8 @@ v>
                 }
                 if (!audioUrl) throw new Error('No audio URL');
                 const scheduleAudio = new Audio(audioUrl);
+                // Apply global volume to schedule audio
+                scheduleAudio.volume = globalVolume;
 
                 const cleanupAndResume = () => {
                     isIntervalPlaying = false;
@@ -852,6 +873,8 @@ v>
                 }
 
                 const intervalAudio = new Audio(audioUrl);
+                // Apply global volume to interval audio
+                intervalAudio.volume = globalVolume;
 
                 const cleanup = () => {
                     isIntervalPlaying = false;
