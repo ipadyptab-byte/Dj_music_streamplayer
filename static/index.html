@@ -126,7 +126,7 @@ v>
         <audio id="audio-player" controls></audio>
     </div>
 
-    <!-- Fallback simple search implementation to ensure search box always works -->
+    <!-- Fallback simple implementations to ensure core buttons always work -->
     <script>
         // Simple, independent search() to guarantee the top search box works
         function search() {
@@ -175,6 +175,55 @@ v>
                 .catch(function () {
                     resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#ff6666;">Error searching.</div>';
                 });
+        }
+
+        // Simple, independent uploadIntervalFile() so the Interval "Upload & Set" button always works
+        function uploadIntervalFile() {
+            var fileInput = document.getElementById('interval-file');
+            var status = document.getElementById('interval-status');
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+                alert('Please select a file first.');
+                return;
+            }
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+            var formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            fetch('/api/upload?type=interval', {
+                method: 'POST',
+                body: formData
+            })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+                if (!data || !data.url) {
+                    if (status) {
+                        status.innerText = 'Upload failed.';
+                        status.style.color = '#ff4444';
+                    }
+                    return;
+                }
+                // Save as current intervalSong in localStorage for later use
+                var songData = { title: data.title, url: data.url, isLocal: true };
+                try {
+                    localStorage.setItem('intervalSong', JSON.stringify(songData));
+                } catch (e) {}
+                if (status) {
+                    status.innerText = '✅ Interval file set: ' + data.title;
+                    status.style.color = '#1db954';
+                }
+                if (typeof loadSavedFiles === 'function') {
+                    loadSavedFiles();
+                }
+            })
+            .catch(function (err) {
+                console.error('Fallback uploadIntervalFile error:', err);
+                if (status) {
+                    status.innerText = '❌ Error uploading interval file.';
+                    status.style.color = '#ff4444';
+                }
+            });
         }
     </script>
 
