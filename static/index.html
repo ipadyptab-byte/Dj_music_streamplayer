@@ -120,17 +120,28 @@
                 scheduleSong = JSON.parse(savedSchedule);
                 document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
             }
+
+            // Restore schedule enabled checkbox
+            const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
+            if (savedScheduleEnabled !== null) {
+                document.getElementById('schedule-enabled').checked = savedScheduleEnabled === 'true';
+            }
             
             // Initialize schedule times
             const savedTimes = JSON.parse(localStorage.getItem('scheduleTimes') || '[]');
             if (savedTimes.length === 0) {
                 addScheduleTime(); // Add one default time if none saved
             } else {
-                savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
+                savedTimes.forEach(time => addScheduleTime(time.value, time.enabled, time.lastRunDate));
             }
         };
 
-        function addScheduleTime(value = '', enabled = true) {
+        // Persist schedule enabled flag
+        document.getElementById('schedule-enabled').addEventListener('change', (e) => {
+            localStorage.setItem('scheduleEnabled', e.target.checked ? 'true' : 'false');
+        });
+
+        function addScheduleTime(value = '', enabled = true, lastRunDate = null) {
             const container = document.getElementById('schedule-times-container');
             const id = 'time-' + Date.now() + Math.random().toString(36).substr(2, 9);
             
@@ -141,6 +152,9 @@
             div.style.gap = '10px';
             div.style.marginBottom = '5px';
             div.className = 'schedule-time-row';
+            if (lastRunDate) {
+                div.dataset.lastRunDate = lastRunDate;
+            }
             
             div.innerHTML = `
                 <input type="checkbox" class="time-enabled" ${enabled ? 'checked' : ''} style="width: auto;" onchange="saveScheduleTimes()">
@@ -161,7 +175,8 @@
             const rows = document.querySelectorAll('.schedule-time-row');
             const times = Array.from(rows).map(row => ({
                 enabled: row.querySelector('.time-enabled').checked,
-                value: row.querySelector('.time-value').value
+                value: row.querySelector('.time-value').value,
+                lastRunDate: row.dataset.lastRunDate || null
             })).filter(t => t.value);
             localStorage.setItem('scheduleTimes', JSON.stringify(times));
         }
@@ -341,8 +356,15 @@
             }
         }
 
+        function getTodayString() {
+            const d = new Date();
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
         function startScheduleChecker() {
-            let scheduleChecker = null;
             function runChecker() {
                 const globalEnabled = document.getElementById('schedule-enabled').checked;
                 if (!globalEnabled || !scheduleSong) return;
@@ -350,24 +372,20 @@
                 const rows = document.querySelectorAll('.schedule-time-row');
                 const now = new Date();
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                const todayStr = getTodayString();
                 
                 rows.forEach(row => {
                     const checkbox = row.querySelector('.time-enabled');
                     const timeInput = row.querySelector('.time-value');
                     const setTime = timeInput.value;
+                    const lastRunDate = row.dataset.lastRunDate || null;
                     
-                    if (checkbox.checked && !checkbox.disabled && setTime === currentTime && !isIntervalPlaying) {
+                    // Trigger once per day per time
+                    if (checkbox.checked && setTime === currentTime && !isIntervalPlaying && lastRunDate !== todayStr) {
                         console.log('Triggering scheduled play at:', currentTime);
                         playScheduleTrack();
-                        
-                        // Disable this specific time for the rest of the minute
-                        checkbox.disabled = true;
-                        checkbox.checked = false;
+                        row.dataset.lastRunDate = todayStr;
                         saveScheduleTimes();
-                        
-                        setTimeout(() => {
-                            checkbox.disabled = false;
-                        }, 61000);
                     }
                 });
             }
