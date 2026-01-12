@@ -259,9 +259,12 @@
             }
         }
 
-        document.getElementById('schedule-time')?.addEventListener('change', (e) => {
-            localStorage.setItem('scheduleTime', e.target.value);
-        });
+        const scheduleTimeInput = document.getElementById('schedule-time');
+        if (scheduleTimeInput) {
+            scheduleTimeInput.addEventListener('change', (e) => {
+                localStorage.setItem('scheduleTime', e.target.value);
+            });
+        }
 
         let intervalSong = null;
         let intervalAudio = null;
