@@ -586,11 +586,21 @@
             
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (!response.ok) {
+                    console.error('Search request failed with status', response.status);
+                    resultsDiv.innerHTML = 'Error searching (server error).';
+                    return;
+                }
                 const results = await response.json();
-                searchResults = results; // Store results for autoplay
+                searchResults = results || []; // Store results for autoplay
                 resultsDiv.innerHTML = '';
                 
-                results.forEach(track => {
+                if (!Array.isArray(searchResults) || searchResults.length === 0) {
+                    resultsDiv.innerHTML = 'No results found.';
+                    return;
+                }
+
+                searchResults.forEach(track => {
                     const div = document.createElement('div');
                     div.className = 'track';
                     div.onclick = () => playTrack(track);
@@ -603,7 +613,8 @@
                     resultsDiv.appendChild(div);
                 });
             } catch (error) {
-                resultsDiv.innerHTML = 'Error searching.';
+                console.error('Error searching:', error);
+                resultsDiv.innerHTML = 'Error searching (network error).';
             }
         }
 
