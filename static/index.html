@@ -271,6 +271,9 @@
         let mainTrackPausedTime = 0;
         let scheduleSong = null;
         let scheduleChecker = null;
+        // New timeout-based scheduling so that the next interval
+        // starts counting after the previous one has finished
+        let intervalTimeout = null;
 
         async function searchSchedule() {
             const query = document.getElementById('schedule-query').value;
@@ -499,29 +502,36 @@
             }
         }
 
-        function startIntervalTimer() {
-            if (intervalTimer) clearInterval(intervalTimer);
+        // Schedule the next interval AFTER the previous interval track has completed
+        function scheduleNextInterval() {
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
-            intervalTimer = setInterval(() => {
+            if (intervalTimeout) clearTimeout(intervalTimeout);
+            intervalTimeout = setTimeout(() => {
                 const enabled = document.getElementById('interval-enabled').checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
                     console.log('Triggering interval play');
                     playIntervalTrack();
+                } else {
+                    // If it couldn't play now (e.g. disabled), try again after the same delay
+                    scheduleNextInterval();
                 }
             }, seconds * 1000);
+        }
+
+        function startIntervalTimer() {
+            // Restart counting from now
+            if (intervalTimeout) clearTimeout(intervalTimeout);
+            const enabled = document.getElementById('interval-enabled').checked;
+            if (enabled && intervalSong) {
+                scheduleNextInterval();
+            }
         }
 
         // Add event listener to restart timer when value changes
         document.getElementById('interval-time').addEventListener('change', () => {
             console.log('Interval time changed, restarting timer');
             startIntervalTimer();
-        });
+      _code
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
@@ -551,6 +561,9 @@
                                 mainPlayer.play().catch(e => console.error("Resume failed:", e));
                             }
                             document.getElementById('current-track').innerText = originalTrackTitle;
+                            // After the interval track COMPLETES, start counting
+                            // for the next interval from this moment.
+                            scheduleNextInterval();
                         };
                         intervalAudio.onended = cleanup;
                         intervalAudio.ontimeupdate = () => {
@@ -565,6 +578,8 @@
                     isIntervalPlaying = false;
                     mainPlayer.play();
                     document.getElementById('current-track').innerText = originalTrackTitle;
+                    // Even on error, restart counting from now
+                    scheduleNextInterval();
                 }
             }
         }
