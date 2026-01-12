@@ -130,7 +130,7 @@ v>
     <!-- Fallback simple implementations to ensure core buttons always work -->
     <script>
         // Simple, independent search() to guarantee the top search box works
-        // Populates global searchResults and clickable rows.
+        // Populates global searchResults and clickable rows that directly play in the main player.
         function search() {
             var input = document.getElementById('query');
             var resultsDiv = document.getElementById('results');
@@ -148,23 +148,60 @@ v>
                         resultsDiv.innerHTML = '<div style="font-size:0.85em;color:#aaa;">No results found.</div>';
                         return;
                     }
-                    // Save globally so playTrackFromResults and autoplay can reuse
+                    // Save globally so autoplay can reuse
                     try {
                         searchResults = results;
-                    } catch (e) {
-                        // if searchResults is not defined yet, ignore; clicking will still work via direct track
-                    }
+                    } catch (e) {}
+
                     resultsDiv.innerHTML = '';
-                    for (var i = 0; i < results.length; i++) {
+                    for (var i = 0; i &lt; results.length; i++) {
                         (function (index) {
                             var track = results[index];
                             var row = document.createElement('div');
                             row.className = 'track';
                             row.style.cursor = 'pointer';
                             row.onclick = function () {
-                                if (typeof playTrack === 'function') {
-                                    playTrack(track);
-                                }
+                                var player = document.getElementById('audio-player');
+                                var currentTrackEl = document.getElementById('current-track');
+                                if (!player) return;
+
+                                if (currentTrackEl) currentTrackEl.innerText = 'Loading: ' + track.title;
+
+                                fetch('/api/play?url=' + encodeURIComponent(track.url))
+                                    .then(function (res) { return res.json(); })
+                                    .then(function (data) {
+                                        if (!data || !data.url) {
+                                            if (currentTrackEl) currentTrackEl.innerText = 'Error loading track';
+                                            return;
+                                        }
+                                        player.src = data.url;
+                                        player.load();
+                                        player.onended = function () {
+                                            // Pick a random next track from the same results
+                                            if (Array.isArray(results) && results.length &gt; 0) {
+                                                var randomIndex = Math.floor(Math.random() * results.length);
+                                                var nextTrack = results[randomIndex];
+                                                // Simulate click on that track to reuse the same logic
+                                                if (nextTrack) {
+                                                    row.onclick.call({ track: nextTrack });
+                                                }
+                                            }
+                                        };
+                                        var playPromise = player.play();
+                                        if (playPromise &amp;&amp; typeof playPromise.then === 'function') {
+                                            playPromise.then(function () {
+                                                if (currentTrackEl) currentTrackEl.innerText = 'Playing: ' + track.title;
+                                            }).catch(function () {
+                                                if (currentTrackEl) currentTrackEl.innerText = 'Paused (Click Play): ' + track.title;
+                                            });
+                                        } else {
+                                            if (currentTrackEl) currentTrackEl.innerText = 'Playing: ' + track.title;
+                                        }
+                                    })
+                                    .catch(function (err) {
+                                        console.error('Error starting track from search:', err);
+                                        if (currentTrackEl) currentTrackEl.innerText = 'Error loading track';
+                                    });
                             };
                             var img = document.createElement('img');
                             img.src = track.thumbnail;
