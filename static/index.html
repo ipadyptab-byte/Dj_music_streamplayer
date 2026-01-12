@@ -168,10 +168,14 @@
 
         async function loadSavedFiles() {
             try {
-                const response = await fetch('/api/files');
-                const files = await response.json();
-                renderFilesList('interval-files-list', files, 'interval');
-                renderFilesList('schedule-files-list', files, 'schedule');
+                const [intervalResponse, scheduleResponse] = await Promise.all([
+                    fetch('/api/files?type=interval'),
+                    fetch('/api/files?type=schedule')
+                ]);
+                const intervalFiles = await intervalResponse.json();
+                const scheduleFiles = await scheduleResponse.json();
+                renderFilesList('interval-files-list', intervalFiles, 'interval');
+                renderFilesList('schedule-files-list', scheduleFiles, 'schedule');
             } catch (error) {
                 console.error('Error loading files:', error);
             }
@@ -232,13 +236,13 @@
             }
         }
 
-        async function deleteSavedFile(filename) {
+        async function deleteSavedFile(filename, type) {
             if (!confirm(`Delete ${filename}?`)) return;
             try {
                 const response = await fetch('/api/delete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filename })
+                    body: JSON.stringify({ filename, type })
                 });
                 if (response.ok) {
                     loadSavedFiles();
@@ -313,11 +317,11 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=schedule', {
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok) {
+                if (!response.ok
                     const errorText = await response.text();
                     console.error('Upload server response:', errorText);
                     throw new Error('Upload failed (server error)');
@@ -479,7 +483,7 @@
             formData.append('file', fileInput.files[0]);
             
             try {
-                const response = await fetch('/api/upload', {
+                const response = await fetch('/api/upload?type=interval', {
                     method: 'POST',
                     body: formData
                 });
