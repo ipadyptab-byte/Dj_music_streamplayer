@@ -105,6 +105,20 @@
                     clock.innerText = now.toLocaleTimeString();
                 }
             }, 1000);
+
+            // Restore enabled/disabled state for schedule and interval from localStorage
+            const scheduleEnabledCheckbox = document.getElementById('schedule-enabled');
+            const savedScheduleEnabled = localStorage.getItem('scheduleEnabled');
+            if (scheduleEnabledCheckbox && savedScheduleEnabled !== null) {
+                scheduleEnabledCheckbox.checked = savedScheduleEnabled === '1';
+            }
+
+            const intervalEnabledCheckbox = document.getElementById('interval-enabled');
+            const savedIntervalEnabled = localStorage.getItem('intervalEnabled');
+            if (intervalEnabledCheckbox && savedIntervalEnabled !== null) {
+                intervalEnabledCheckbox.checked = savedIntervalEnabled === '1';
+            }
+
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
@@ -267,6 +281,20 @@
         if (scheduleTimeInput) {
             scheduleTimeInput.addEventListener('change', (e) => {
                 localStorage.setItem('scheduleTime', e.target.value);
+            });
+        }
+
+        // Persist enabled/disabled state of schedule and interval so they stay active across days
+        const scheduleEnabledEl = document.getElementById('schedule-enabled');
+        if (scheduleEnabledEl) {
+            scheduleEnabledEl.addEventListener('change', (e) => {
+                localStorage.setItem('scheduleEnabled', e.target.checked ? '1' : '0');
+            });
+        }
+        const intervalEnabledEl = document.getElementById('interval-enabled');
+        if (intervalEnabledEl) {
+            intervalEnabledEl.addEventListener('change', (e) => {
+                localStorage.setItem('intervalEnabled', e.target.checked ? '1' : '0');
             });
         }
 
