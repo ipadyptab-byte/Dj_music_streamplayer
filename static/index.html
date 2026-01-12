@@ -210,7 +210,7 @@
                 deleteBtn.style.cursor = 'pointer';
                 deleteBtn.onclick = (e) => {
                     e.stopPropagation();
-                    deleteSavedFile(file.title);
+                    deleteSavedFile(file.title, type);
                 };
                 
                 div.appendChild(nameSpan);
