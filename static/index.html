@@ -321,7 +321,7 @@
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok
+                if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Upload server response:', errorText);
                     throw new Error('Upload failed (server error)');
