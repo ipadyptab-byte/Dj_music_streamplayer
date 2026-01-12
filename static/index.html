@@ -607,8 +607,8 @@
                     div.onclick = () => playTrackAtIndex(index);
                     div.innerHTML = `
                        <kimg src="${track.thumbnail}" alt="thumbnail">
-                       <kdiv class                           <div>${track.title}</div>
-                        </div>
+                       <kdiv class="track-info">
+                           <ldiv>${track                      </div>
                     `;
                     resultsDiv.appendChild(div);
                 });
@@ -637,14 +637,17 @@
                     
                     player.onended = () => {
                         if (!Array.isArray(searchResults) || searchResults.length === 0) return;
-                        // pick a random next track (can repeat, but try to avoid immediate repeat if possible)
+                        // pick a random next track, avoid immediate repeat if possible
                         if (searchResults.length === 1) {
                             playTrackAtIndex(0);
                             return;
                         }
                         let nextIndex = currentTrackIndex;
                         while (nextIndex === currentTrackIndex) {
-                            nextIndex = Math.floor(MathIndex(currentTrackIndex);
+                            nextIndex = Math.floor(Math.random() * searchResults.length);
+                        }
+                        currentTrackIndex = nextIndex;
+                        playTrackAtIndex(currentTrackIndex);
                     };
                     
                     const playPromise = player.play();
