@@ -577,6 +577,7 @@
         }
 
         let searchResults = [];
+        let currentTrackIndex = -1;
 
         async function search() {
             const query = document.getElementById('query').value;
@@ -600,14 +601,13 @@
                     return;
                 }
 
-                searchResults.forEach(track => {
+                searchResults.forEach((track, index) => {
                     const div = document.createElement('div');
                     div.className = 'track';
-                    div.onclick = () => playTrack(track);
+                    div.onclick = () => playTrackAtIndex(index);
                     div.innerHTML = `
-                        <img src="${track.thumbnail}" alt="thumbnail">
-                        <div class="track-info">
-                            <div>${track.title}</div>
+                       <kimg src="${track.thumbnail}" alt="thumbnail">
+                       <kdiv class                           <div>${track.title}</div>
                         </div>
                     `;
                     resultsDiv.appendChild(div);
@@ -618,13 +618,15 @@
             }
         }
 
-        async function playTrack(track) {
+        async function playTrackAtIndex(index) {
+            if (!Array.isArray(searchResults) || searchResults.length === 0) return;
+            if (index < 0 || index >= searchResults.length) return;
+
+            currentTrackIndex = index;
+            const track = searchResults[currentTrackIndex];
+
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
             
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
@@ -634,16 +636,12 @@
                     player.load();
                     
                     player.onended = () => {
-                        if (searchResults.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * searchResults.length);
-                            playTrack(searchResults[randomIndex]);
-                        }
+                        if (!Array.isArray(searchResults) || searchResults.length === 0) return;
+                        // Move to next track in list; loop back to start when reaching end
+                        currentTrackIndex = (currentTrackIndex + 1) % searchResults.length;
+                        playTrackAtIndex(currentTrackIndex);
                     };
                     
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
                     const playPromise = player.play();
                     
                     if (playPromise !== undefined) {
@@ -651,7 +649,6 @@
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
                                 player.play().catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
