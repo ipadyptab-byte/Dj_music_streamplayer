@@ -5,94 +5,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Player</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: stretch; padding: 20px; box-sizing: border-box; }
+        .layout { display: flex; width: 100%; max-width: 1200px; margin-top: 10px; gap: 20px; }
+        .left-panel { flex: 0 0 420px; display: flex; flex-direction: column; align-items: center; }
+        .right-panel { flex: 1; max-height: calc(100vh - 120px); overflow-y: auto; border-left: 1px solid #333; padding-left: 15px; }
         .search-container { margin-bottom: 20px; width: 100%; max-width: 500px; display: flex; }
         input { flex: 1; padding: 10px; border-radius: 5px 0 0 5px; border: none; }
         button { padding: 10px 20px; border-radius: 0 5px 5px 0; border: none; background: #1db954; color: white; cursor: pointer; }
-        .results { width: 100%; max-width: 600px; }
+        .results { width: 100%; }
         .track { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; }
         .track:hover { background: #282828; }
         .track img { width: 60px; height: 60px; margin-right: 15px; border-radius: 5px; }
         .track-info { flex: 1; }
-        .player-container { position: fixed; bottom: 0; left: 0; width: 100%; background: #282828; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; }
-        audio { width: 100%; max-width: 600px; margin-top: 10px; }
+        .player-container { background: #282828; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 500px; margin-top: 10px; border-radius: 5px; }
+        audio { width: 100%; margin-top: 10px; }
         #current-track { font-weight: bold; margin-bottom: 5px; }
     </style>
 </head>
 <body>
     <h1>Music Search</h1>
-    <div class="search-container">
-        <input type="text" id="query" placeholder="Search for music...">
-        <button onclick="search()">Search</button>
-    </div>
 
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Interval Settings</h3>
-        <label>
-            <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 10px;">
-            Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
-        </div>
-    </div>
-
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Schedule Play (Bhajan/Prayer)</h3>
-        <label>
-            <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <span>Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.1em; color: #1db954;">00:00:00</span></span>
-                <button onclick="addScheduleTime()" style="padding: 2px 10px; font-size: 0.8em; width: auto;">+ Add Time</button>
+    <div class="layout">
+        <!-- Left side: search & players -->
+        <div class="left-panel">
+            <div class="search-container">
+                <input type="text" id="query" placeholder="Search for music...">
+                <button onclick="search()">Search</button>
             </div>
-            <div id="schedule-times-container">
-                <!-- Time inputs will be added here -->
+
+            <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
+                <h3>Interval Settings</h3>
+                <label>
+                    <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload &amp; Set</button>
+                </div>
+                <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 10px;">
+                    Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
+                <h3>Schedule Play (Bhajan/Prayer)</h3>
+                <label>
+                    <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload &amp; Set</button>
+                </div>
+                <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <span>Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.1em; color: #1db954;">00:00:00</span></span>
+                        <button onclick="addScheduleTime()" style="padding: 2px 10px; font-size: 0.8em; width: auto;">+ Add Time</button>
+                    </div>
+                    <div id="schedule-times-container">
+                        <!-- Time inputs will be added here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="player-container">
+                <div id="current-track">No track selected</div>
+                <audio id="audio-player" controls></audio>
             </div>
         </div>
-    </div>
 
-    <div class="results" id="results"></div>
-
-    <div class="player-container">
-        <div id="current-track">No track selected</div>
-        <audio id="audio-player" controls></audio>
+        <!-- Right side: scrollable search results -->
+        <div class="right-panel">
+            <div class="results" id="results"></div>
+        </div>
     </div>
 
     <script>
