@@ -86,8 +86,8 @@ def search_youtube(query):
                     sample_markers = ("sample", "sampler", "samples", "sampling")
                     if any(m in title_lower for m in sample_markers):
                         continue
-                    # Explicitly remove a very common generic result: "Sample Track"
-                    if title_lower.strip() == "sample track":
+                    # Explicitly remove anything that looks like a "Sample Track"
+                    if "sample track" in title_lower:
                         continue
                     if "demo" in title_lower:
                         continue
