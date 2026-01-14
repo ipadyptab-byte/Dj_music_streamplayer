@@ -67,7 +67,14 @@ def search_youtube(query):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
+            # Request more raw results from YouTube so that after filtering
+            # we can still return (up to) 20 strongly related, non-sample tracks.
+            search_results = ydl.extract_info(f"ytsearch50:{query}", download=False)
+            results = []
+            if search_results and 'entries' in search_results:
+                q = (query or "").lower().strip()
+                # Split query into significant words (ignore very short/common words)
+                words = [w for w in q.split() if len(w) &gt; 3]earch_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
             results = []
             if search_results and 'entries' in search_results:
                 q = (query or "").lower().strip()
