@@ -19,7 +19,8 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+# Serve static files under /static to avoid conflicts with /api/* endpoints
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='/static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
