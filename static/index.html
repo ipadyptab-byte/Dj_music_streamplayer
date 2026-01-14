@@ -117,6 +117,19 @@
                     clock.innerText = now.toLocaleTimeString();
                 }
             }, 1000);
+
+            // Restore global schedule enabled/disabled state
+            const scheduleEnabledSaved = localStorage.getItem('scheduleEnabled');
+            if (scheduleEnabledSaved !== null) {
+                document.getElementById('schedule-enabled').checked = scheduleEnabledSaved === 'true';
+            }
+
+            // Restore global interval enabled/disabled state
+            const intervalEnabledSaved = localStorage.getItem('intervalEnabled');
+            if (intervalEnabledSaved !== null) {
+                document.getElementById('interval-enabled').checked = intervalEnabledSaved === 'true';
+            }
+
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
@@ -140,6 +153,14 @@
             } else {
                 savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
             }
+
+            // Save global schedule/interval enabled state whenever user changes it
+            document.getElementById('schedule-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('scheduleEnabled', e.target.checked ? 'true' : 'false');
+            });
+            document.getElementById('interval-enabled').addEventListener('change', (e) => {
+                localStorage.setItem('intervalEnabled', e.target.checked ? 'true' : 'false');
+            });
         };
 
         function addScheduleTime(value = '', enabled = true) {
