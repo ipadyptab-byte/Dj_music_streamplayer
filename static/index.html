@@ -393,13 +393,15 @@
                         console.log('Triggering scheduled play at:', currentTime);
                         playScheduleTrack();
                         
-                        // Disable this specific time for the rest of the minute
+                        // Temporarily disable this specific time for the rest of the minute,
+                        // but KEEP it checked so that it stays logically enabled for future days.
                         checkbox.disabled = true;
-                        checkbox.checked = false;
                         saveScheduleTimes();
                         
                         setTimeout(() => {
                             checkbox.disabled = false;
+                            // State in localStorage already has it as enabled (checked = true)
+                            saveScheduleTimes();
                         }, 61000);
                     }
                 });
