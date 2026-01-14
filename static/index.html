@@ -272,6 +272,10 @@
         let scheduleSong = null;
         let scheduleChecker = null;
 
+        // Remember main player state while interval is playing
+        let mainPlayerWasPlayingBeforeInterval = false;
+        let mainTrackTitleBeforeInterval = '';
+
         async function searchSchedule() {
             const query = document.getElementById('schedule-query').value;
             if (!query) return;
@@ -525,48 +529,89 @@
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
-            if (mainPlayer.src && !mainPlayer.paused) {
-                const wasPlaying = !mainPlayer.paused;
-                const originalTrackTitle = document.getElementById('current-track').innerText;
-                
+            const currentTitleEl = document.getElementById('current-track');
+
+            // Store main player state so we can restore it later
+            mainPlayerWasPlayingBeforeInterval = !mainPlayer.paused && !!mainPlayer.src;
+            mainTrackTitleBeforeInterval = currentTitleEl.innerText;
+
+            // Pause main track if it was playing
+            if (mainPlayerWasPlayingBeforeInterval) {
                 mainPlayer.pause();
-                isIntervalPlaying = true;
-                document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
-                
-                try {
-                    let audioUrl = intervalSong.url;
-                    if (!intervalSong.isLocal) {
-                        const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
-                        const data = await response.json();
-                        audioUrl = data.url;
-                    }
-                    
-                    if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
-                        const cleanup = () => {
-                            isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
-                            if (wasPlaying) {
-                                mainPlayer.play().catch(e => console.error("Resume failed:", e));
-                            }
-                            document.getElementById('current-track').innerText = originalTrackTitle;
-                        };
-                        intervalAudio.onended = cleanup;
-                        intervalAudio.ontimeupdate = () => {
-                            if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
-                                intervalAudio.ontimeupdate = null;
-                                cleanup();
-                            }
-                        };
-                        intervalAudio.play();
-                    }
-                } catch (error) {
-                    isIntervalPlaying = false;
-                    mainPlayer.play();
-                    document.getElementById('current-track').innerText = originalTrackTitle;
-                }
             }
+
+            if (!intervalSong) return;
+
+            isIntervalPlaying = true;
+            currentTitleEl.innerText = 'Interval Playing: ' + intervalSong.title;
+
+            try {
+                let audioUrl = intervalSong.url;
+                if (!intervalSong.isLocal) {
+                    const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
+                    const data = await response.json();
+                    audioUrl = data.url;
+                }
+
+                if (audioUrl) {
+                    // Use global intervalAudio so pause/stop buttons can control it
+                    if (intervalAudio) {
+                        intervalAudio.pause();
+                        intervalAudio.src = "";
+                    }
+                    intervalAudio = new Audio(audioUrl);
+
+                    const cleanup = () => {
+                        if (!intervalAudio) return;
+                        isIntervalPlaying = false;
+                        intervalAudio.pause();
+                        intervalAudio.currentTime = 0;
+                        intervalAudio.src = "";
+                        intervalAudio = null;
+
+                        // Resume main player only if it was playing before the interval
+                        if (mainPlayerWasPlayingBeforeInterval && mainPlayer.src) {
+                            mainPlayer.play().catch(e => console.error("Resume failed:", e));
+                        }
+                        currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
+                    };
+
+                    intervalAudio.onended = cleanup;
+                    intervalAudio.ontimeupdate = () => {
+                        if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                            intervalAudio.ontimeupdate = null;
+                            cleanup();
+                        }
+                    };
+                    intervalAudio.play();
+                }
+            } catch (error) {
+                console.error('Error playing interval track:', error);
+                isIntervalPlaying = false;
+                if (mainPlayerWasPlayingBeforeInterval && mainPlayer.src) {
+                    mainPlayer.play().catch(e => console.error("Resume after error failed:", e));
+                }
+                currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
+            }
+        }
+
+        function pauseIntervalTrack() {
+            if (intervalAudio) {
+                intervalAudio.pause();
+            }
+        }
+
+        function stopIntervalTrack() {
+            const currentTitleEl = document.getElementById('current-track');
+            if (intervalAudio) {
+                intervalAudio.pause();
+                intervalAudio.currentTime = 0;
+                intervalAudio.src = "";
+                intervalAudio = null;
+            }
+            isIntervalPlaying = false;
+            // Do not auto-resume main track on manual stop; just restore title
+            currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
         }
 
         let searchResults = [];
