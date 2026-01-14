@@ -96,6 +96,18 @@
     </div>
 
     <script>
+        // When the browser window/tab is closed, ask the server to shut down.
+        // navigator.sendBeacon is used because it works reliably during unload.
+        window.addEventListener('beforeunload', () => {
+            try {
+                const blob = new Blob([], { type: 'application/json' });
+                navigator.sendBeacon('/shutdown', blob);
+            } catch (e) {
+                // Fallback – fire-and-forget fetch; it's okay if it fails silently.
+                fetch('/shutdown', { method: 'POST', keepalive: true }).catch(() => {});
+            }
+        });
+
         // Initialize clock immediately on load
         window.onload = () => {
             setInterval(() => {

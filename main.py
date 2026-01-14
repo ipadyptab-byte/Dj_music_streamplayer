@@ -126,6 +126,16 @@ def delete_file():
         return jsonify({'success': True})
     return jsonify({'error': 'File not found'}), 404
 
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Shutdown the Flask development server (used when browser window is closed)."""
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
+    func()
+    return jsonify({'success': True, 'message': 'Server shutting down...'})
+
 def is_port_in_use(host="127.0.0.1", port=5000):
     """Return True if the port is already in use on the given host."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
