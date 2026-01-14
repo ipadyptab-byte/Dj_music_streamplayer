@@ -77,8 +77,10 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
+    # Prefer browser‑friendly formats (m4a) and avoid video streams.
+    # This reduces “no supported source was found” errors in browsers.
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'quiet': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
