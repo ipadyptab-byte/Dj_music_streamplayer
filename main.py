@@ -5,17 +5,23 @@ import os
 import sys
 import webbrowser
 from threading import Timer
+import socket
 
 # ===============================
 # PyInstaller-safe base directory
 # ===============================
 if getattr(sys, 'frozen', False):
+    # When packaged (PyInstaller), static files live in the temp
+    # extraction directory, but user data (uploads) should live
+    # next to the executable so it persists between runs.
+    EXEC_DIR = os.path.dirname(sys.executable)
     BASE_DIR = sys._MEIPASS
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = EXEC_DIR
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_FOLDER = os.path.join(EXEC_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -120,9 +126,40 @@ def delete_file():
         return jsonify({'success': True})
     return jsonify({'error': 'File not found'}), 404
 
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Shutdown the Flask development server (used when browser window is closed)."""
+    func = request.environ.get('werkzeug.server.shutdown')
+    if func is None:
+        return jsonify({'error': 'Not running with the Werkzeug Server'}), 500
+    func()
+    return jsonify({'success': True, 'message': 'Server shutting down...'})
+
+def is_port_in_use(host="127.0.0.1", port=5000):
+    """Return True if the port is already in use on the given host."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return False
+        except OSError:
+            return True
+
+
 # ===============================
 # App start
 # ===============================
 if __name__ == "__main__":
+    host = "127.0.0.1"
+    port = 5000
+
+    # If another instance is already running, just open the browser and exit.
+    if is_port_in_use(host, port):
+        try:
+            webbrowser.open(f"http://{host}:{port}")
+        finally:
+            sys.exit(0)
+
     Timer(1, open_browser).start()
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host=host, port=port)

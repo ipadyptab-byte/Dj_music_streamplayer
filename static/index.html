@@ -96,6 +96,18 @@
     </div>
 
     <script>
+        // When the browser window/tab is closed, ask the server to shut down.
+        // navigator.sendBeacon is used because it works reliably during unload.
+        window.addEventListener('beforeunload', () => {
+            try {
+                const blob = new Blob([], { type: 'application/json' });
+                navigator.sendBeacon('/shutdown', blob);
+            } catch (e) {
+                // Fallback – fire-and-forget fetch; it's okay if it fails silently.
+                fetch('/shutdown', { method: 'POST', keepalive: true }).catch(() => {});
+            }
+        });
+
         // Initialize clock immediately on load
         window.onload = () => {
             setInterval(() => {
@@ -106,7 +118,15 @@
                 }
             }, 1000);
             startScheduleChecker();
+
+            // Restore saved interval seconds or use default 180
+            const savedIntervalSeconds = parseInt(localStorage.getItem('intervalSeconds') || '180');
+            const intervalInput = document.getElementById('interval-time');
+            if (intervalInput) {
+                intervalInput.value = savedIntervalSeconds;
+            }
             startIntervalTimer();
+
             loadSavedFiles();
             
             // Restore from localStorage
@@ -502,11 +522,9 @@
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
+
+            // Persist the interval seconds so it survives reloads
+            localStorage.setItem('intervalSeconds', String(seconds));
             
             intervalTimer = setInterval(() => {
                 const enabled = document.getElementById('interval-enabled').checked;
@@ -516,10 +534,15 @@
                 }
             }, seconds * 1000);
         }
-
-        // Add event listener to restart timer when value changes
-        document.getElementById('interval-time').addEventListener('change', () => {
+        
+        // Add event listener to restart timer when value changes or user tabs out
+        const intervalTimeInput = document.getElementById('interval-time');
+        intervalTimeInput.addEventListener('change', () => {
             console.log('Interval time changed, restarting timer');
+            startIntervalTimer();
+        });
+        intervalTimeInput.addEventListener('blur', () => {
+            console.log('Interval time blur (tab/leave), restarting timer');
             startIntervalTimer();
         });
 
