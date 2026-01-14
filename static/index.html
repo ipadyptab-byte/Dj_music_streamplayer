@@ -299,6 +299,7 @@
         let intervalSong = null;
         let intervalAudio = null;
         let scheduleAudio = null;
+        // We now use a one-shot timeout instead of a fixed interval
         let intervalTimer = null;
         let isIntervalPlaying = false;
         let mainTrackPausedTime = 0;
@@ -534,18 +535,24 @@
             }
         }
 
+        // Start or restart the interval timer.
+        // We use a one-shot timeout so that the next play happens:
+        //   track duration + configured interval seconds
+        // between starts.
         function startIntervalTimer() {
-            if (intervalTimer) clearInterval(intervalTimer);
+            if (intervalTimer) {
+                clearTimeout(intervalTimer);
+                intervalTimer = null;
+            }
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
-            intervalTimer = setInterval(() => {
-                const enabled = document.getElementById('interval-enabled').checked;
-                if (enabled && intervalSong && !isIntervalPlaying) {
+            const enabled = document.getElementById('interval-enabled').checked;
+
+            // Only schedule if interval is enabled and we have a song
+            if (!enabled || !intervalSong) return;
+
+            intervalTimer = setTimeout(() => {
+                const stillEnabled = document.getElementById('interval-enabled').checked;
+                if (stillEnabled && intervalSong && !isIntervalPlaying) {
                     console.log('Triggering interval play');
                     playIntervalTrack();
                 }
@@ -560,47 +567,65 @@
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
-            if (mainPlayer.src && !mainPlayer.paused) {
-                const wasPlaying = !mainPlayer.paused;
-                const originalTrackTitle = document.getElementById('current-track').innerText;
-                
+            if (!intervalSong) return;
+
+            // Capture whether main track was playing
+            const wasPlaying = mainPlayer.src && !mainPlayer.paused;
+            const originalTrackTitle = document.getElementById('current-track').innerText;
+
+            if (wasPlaying) {
                 mainPlayer.pause();
-                isIntervalPlaying = true;
-                document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
-                
-                try {
-                    let audioUrl = intervalSong.url;
-                    if (!intervalSong.isLocal) {
-                        const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
-                        const data = await response.json();
-                        audioUrl = data.url;
-                    }
-                    
-                    if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
-                        const cleanup = () => {
-                            isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
-                            if (wasPlaying) {
-                                mainPlayer.play().catch(e => console.error("Resume failed:", e));
-                            }
-                            document.getElementById('current-track').innerText = originalTrackTitle;
-                        };
-                        intervalAudio.onended = cleanup;
-                        intervalAudio.ontimeupdate = () => {
-                            if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
-                                intervalAudio.ontimeupdate = null;
-                                cleanup();
-                            }
-                        };
-                        intervalAudio.play();
-                    }
-                } catch (error) {
-                    isIntervalPlaying = false;
-                    mainPlayer.play();
-                    document.getElementById('current-track').innerText = originalTrackTitle;
+            }
+            isIntervalPlaying = true;
+            document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
+
+            try {
+                let audioUrl = intervalSong.url;
+                if (!intervalSong.isLocal) {
+                    const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
+                    const data = await response.json();
+                    audioUrl = data.url;
                 }
+                
+                if (audioUrl) {
+                    const intervalAudio = new Audio(audioUrl);
+
+                    const cleanup = () => {
+                        isIntervalPlaying = false;
+                        intervalAudio.pause();
+                        intervalAudio.src = "";
+                        if (wasPlaying) {
+                            mainPlayer.play().catch(e => console.error("Resume failed:", e));
+                        }
+                        document.getElementById('current-track').innerText = originalTrackTitle;
+
+                        // After the interval track has finished, schedule the next one.
+                        // This makes the time between starts = track duration + configured interval seconds.
+                        startIntervalTimer();
+                    };
+
+                    intervalAudio.onended = cleanup;
+                    intervalAudio.ontimeupdate = () => {
+                        if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                            intervalAudio.ontimeupdate = null;
+                            cleanup();
+                        }
+                    };
+                    intervalAudio.play();
+                } else {
+                    // If we failed to get audio URL, re-arm timer so it can try again later
+                    isIntervalPlaying = false;
+                    document.getElementById('current-track').innerText = originalTrackTitle;
+                    startIntervalTimer();
+                }
+            } catch (error) {
+                isIntervalPlaying = false;
+                if (wasPlaying) {
+                    mainPlayer.play();
+                }
+                document.getElementById('current-track').innerText = originalTrackTitle;
+                // Re-arm timer to try again later
+                startIntervalTimer();
             }
         }
 
