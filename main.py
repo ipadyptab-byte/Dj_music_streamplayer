@@ -53,7 +53,10 @@ def search_youtube(query):
     Search YouTube and return only results that are strongly related
     to the given query. We:
     - Require that all significant words from the query appear in the title.
-    - Explicitly filter out generic / demo / sample tracks (e.g. titles containing 'sample').
+    - Explicitly filter out any kind of sample / demo tracks:
+      * titles containing 'sample', 'sampler', 'samples', 'sampling'
+      * titles containing 'demo'
+      * uploaders whose name contains 'sample' or 'demo'
     """
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -70,14 +73,22 @@ def search_youtube(query):
                 q = (query or "").lower().strip()
                 # Split query into significant words (ignore very short/common words)
                 words = [w for w in q.split() if len(w) > 3]
+
                 for entry in search_results['entries']:
                     if not entry:
                         continue
+
                     title = (entry.get('title') or "").strip()
                     title_lower = title.lower()
+                    uploader = (entry.get('uploader') or "").lower()
 
-                    # Remove obvious demo / sample tracks
-                    if "sample" in title_lower or "demo" in title_lower:
+                    # Remove any kind of sample/demo tracks very aggressively
+                    sample_markers = ("sample", "sampler", "samples", "sampling")
+                    if any(m in title_lower for m in sample_markers):
+                        continue
+                    if "demo" in title_lower:
+                        continue
+                    if "sample" in uploader or "demo" in uploader:
                         continue
 
                     # If we have significant words, require that each one appears in the title
