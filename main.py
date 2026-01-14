@@ -74,11 +74,6 @@ def search_youtube(query):
             if search_results and 'entries' in search_results:
                 q = (query or "").lower().strip()
                 # Split query into significant words (ignore very short/common words)
-                words = [w for w in q.split() if len(w) &gt; 3]earch_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
-            results = []
-            if search_results and 'entries' in search_results:
-                q = (query or "").lower().strip()
-                # Split query into significant words (ignore very short/common words)
                 words = [w for w in q.split() if len(w) > 3]
 
                 for entry in search_results['entries']:
