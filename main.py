@@ -49,6 +49,12 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 def search_youtube(query):
+    """
+    Search YouTube and return only results that are strongly related
+    to the given query. We:
+    - Require that all significant words from the query appear in the title.
+    - Explicitly filter out generic / demo / sample tracks (e.g. titles containing 'sample').
+    """
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
@@ -61,15 +67,27 @@ def search_youtube(query):
             search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
             results = []
             if search_results and 'entries' in search_results:
-                q = (query or "").lower()
+                q = (query or "").lower().strip()
+                # Split query into significant words (ignore very short/common words)
+                words = [w for w in q.split() if len(w) > 3]
                 for entry in search_results['entries']:
                     if not entry:
                         continue
-                    title = entry.get('title') or ""
-                    # Keep only videos whose title contains the query text (case‑insensitive)
-                    # so that results are more obviously related to the user input.
-                    if q and q not in title.lower():
+                    title = (entry.get('title') or "").strip()
+                    title_lower = title.lower()
+
+                    # Remove obvious demo / sample tracks
+                    if "sample" in title_lower or "demo" in title_lower:
                         continue
+
+                    # If we have significant words, require that each one appears in the title
+                    if words and not all(w in title_lower for w in words):
+                        continue
+
+                    # Fallback: if no significant words, still require the raw query substring
+                    if not words and q and q not in title_lower:
+                        continue
+
                     video_id = entry.get('id')
                     results.append({
                         'id': video_id,
