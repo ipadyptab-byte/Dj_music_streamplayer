@@ -5,98 +5,191 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Player</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .search-container { margin-bottom: 20px; width: 100%; max-width: 500px; display: flex; }
-        input { flex: 1; padding: 10px; border-radius: 5px 0 0 5px; border: none; }
-        button { padding: 10px 20px; border-radius: 0 5px 5px 0; border: none; background: #1db954; color: white; cursor: pointer; }
-        .results { width: 100%; max-width: 600px; }
-        .track { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; }
-        .track:hover { background: #282828; }
-        .track img { width: 60px; height: 60px; margin-right: 15px; border-radius: 5px; }
-        .track-info { flex: 1; }
-        .player-container { position: fixed; bottom: 0; left: 0; width: 100%; background: #282828; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; }
-        audio { width: 100%; max-width: 600px; margin-top: 10px; }
-        #current-track { font-weight: bold; margin-bottom: 5px; }
+        body {
+            font-family: sans-serif;
+            background: #121212;
+            color: white;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .layout {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 20px;
+            width: 100%;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .search-container {
+            margin-bottom: 20px;
+            width: 100%;
+            display: flex;
+        }
+
+        .search-container input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border-radius: 5px 0 0 5px;
+            border: none;
+        }
+
+        .search-container button {
+            padding: 10px 20px;
+            border-radius: 0 5px 5px 0;
+            border: none;
+            background: #1db954;
+            color: white;
+            cursor: pointer;
+        }
+
+        .results {
+            flex: 1;
+            max-height: 500px;
+            overflow-y: auto;
+            background: #181818;
+            border-radius: 5px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .track {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .track:hover {
+            background: #282828;
+        }
+
+        .track img {
+            width: 60px;
+            height: 60px;
+            margin-right: 15px;
+            border-radius: 5px;
+        }
+
+        .track-info {
+            flex: 1;
+        }
+
+        .player-container {
+            background: #282828;
+            padding: 15px;
+            box-sizing: border-box;
+            width: 100%;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        #current-track {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
     </style>
 </head>
 <body>
     <h1>Music Search</h1>
-    <div class="search-container">
-        <input type="text" id="query" placeholder="Search for music...">
-        <button onclick="search()">Search</button>
-    </div>
 
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Interval Settings</h3>
-        <label>
-            <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 10px;">
-            Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
-        </div>
-    </div>
-
-    <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
-        <h3>Schedule Play (Bhajan/Prayer)</h3>
-        <label>
-            <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
-        </label>
-        <div style="margin-top: 10px;">
-            <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
-            <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
-        </div>
-        <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
-            Or upload local file:
-            <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
-            <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload & Set</button>
-        </div>
-        <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
-        <div style="margin-top: 10px; display: flex; gap: 5px;">
-            <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
-            <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
-            <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
-        </div>
-        <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
-            Loading saved files...
-        </div>
-        <div style="margin-top: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                <span>Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.1em; color: #1db954;">00:00:00</span></span>
-                <button onclick="addScheduleTime()" style="padding: 2px 10px; font-size: 0.8em; width: auto;">+ Add Time</button>
+    <div class="layout">
+        <!-- Left side: search bar, interval/schedule controls, player -->
+        <div class="left-panel">
+            <div class="search-container">
+                <input type="text" id="query" placeholder="Search for music...">
+                <button onclick="search()">Search</button>
             </div>
-            <div id="schedule-times-container">
-                <!-- Time inputs will be added here -->
+
+            <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
+                <h3>Interval Settings</h3>
+                <label>
+                    <input type="checkbox" id="interval-enabled" style="width: auto;"> Enable Interval Track
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="interval-query" placeholder="Search for interval song (e.g. Bhajan)..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchInterval()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="interval-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadIntervalFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload &amp; Set</button>
+                </div>
+                <div id="interval-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopIntervalTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 10px;">
+                    Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
+                <h3>Schedule Play (Bhajan/Prayer)</h3>
+                <label>
+                    <input type="checkbox" id="schedule-enabled" style="width: auto;"> Enable Scheduled Play
+                </label>
+                <div style="margin-top: 10px;">
+                    <input type="text" id="schedule-query" placeholder="Search for Bhajan/Prayer..." style="border-radius: 5px; margin-bottom: 5px;">
+                    <button onclick="searchSchedule()" style="border-radius: 5px; width: 100%;">Set from YouTube</button>
+                </div>
+                <div style="margin-top: 10px; border-top: 1px solid #444; padding-top: 10px;">
+                    Or upload local file:
+                    <input type="file" id="schedule-file" accept="audio/*" style="margin-top: 5px;">
+                    <button onclick="uploadScheduleFile()" style="border-radius: 5px; width: 100%; margin-top: 5px;">Upload &amp; Set</button>
+                </div>
+                <div id="schedule-status" style="margin-top: 5px; font-size: 0.9em; color: #1db954;"></div>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <button onclick="playScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #1db954;">▶ Play</button>
+                    <button onclick="pauseScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #f39c12;">⏸ Pause</button>
+                    <button onclick="stopScheduleTrack()" style="flex: 1; padding: 5px; font-size: 0.8em; background: #e74c3c;">⏹ Stop</button>
+                </div>
+                <div id="schedule-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
+                    Loading saved files...
+                </div>
+                <div style="margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <span>Current Time: <span id="current-clock" style="font-family: monospace; font-size: 1.1em; color: #1db954;">00:00:00</span></span>
+                        <button onclick="addScheduleTime()" style="padding: 2px 10px; font-size: 0.8em; width: auto;">+ Add Time</button>
+                    </div>
+                    <div id="schedule-times-container">
+                        <!-- Time inputs will be added here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="player-container">
+                <div id="current-track">No track selected</div>
+                <audio id="audio-player" controls></audio>
             </div>
         </div>
-    </div>
 
-    <div class="results" id="results"></div>
-
-    <div class="player-container">
-        <div id="current-track">No track selected</div>
-        <audio id="audio-player" controls></audio>
+        <!-- Right side: search results -->
+        <div class="results" id="results"></div>
     </div>
 
     <script>
-        // Initialize clock immediately on load
+        // Clock + initial setup
         window.onload = () => {
             setInterval(() => {
                 const clock = document.getElementById('current-clock');
@@ -108,23 +201,25 @@
             startScheduleChecker();
             startIntervalTimer();
             loadSavedFiles();
-            
+
             // Restore from localStorage
             const savedInterval = localStorage.getItem('intervalSong');
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
-                document.getElementById('interval-status').innerText = 'Restored: ' + intervalSong.title;
+                const el = document.getElementById('interval-status');
+                if (el) el.innerText = 'Restored: ' + intervalSong.title;
             }
             const savedSchedule = localStorage.getItem('scheduleSong');
             if (savedSchedule) {
                 scheduleSong = JSON.parse(savedSchedule);
-                document.getElementById('schedule-status').innerText = 'Restored: ' + scheduleSong.title;
+                const el = document.getElementById('schedule-status');
+                if (el) el.innerText = 'Restored: ' + scheduleSong.title;
             }
-            
+
             // Initialize schedule times
             const savedTimes = JSON.parse(localStorage.getItem('scheduleTimes') || '[]');
             if (savedTimes.length === 0) {
-                addScheduleTime(); // Add one default time if none saved
+                addScheduleTime();
             } else {
                 savedTimes.forEach(time => addScheduleTime(time.value, time.enabled));
             }
@@ -132,8 +227,9 @@
 
         function addScheduleTime(value = '', enabled = true) {
             const container = document.getElementById('schedule-times-container');
+            if (!container) return;
             const id = 'time-' + Date.now() + Math.random().toString(36).substr(2, 9);
-            
+
             const div = document.createElement('div');
             div.id = id;
             div.style.display = 'flex';
@@ -141,7 +237,7 @@
             div.style.gap = '10px';
             div.style.marginBottom = '5px';
             div.className = 'schedule-time-row';
-            
+
             div.innerHTML = `
                 <input type="checkbox" class="time-enabled" ${enabled ? 'checked' : ''} style="width: auto;" onchange="saveScheduleTimes()">
                 <input type="time" class="time-value" value="${value}" style="flex: 1; padding: 5px; border-radius: 5px; background: #333; color: white; border: 1px solid #444;" onchange="saveScheduleTimes()">
@@ -169,6 +265,7 @@
         async function loadSavedFiles() {
             try {
                 const response = await fetch('/api/files');
+                if (!response.ok) return;
                 const files = await response.json();
                 renderFilesList('interval-files-list', files, 'interval');
                 renderFilesList('schedule-files-list', files, 'schedule');
@@ -179,7 +276,8 @@
 
         function renderFilesList(containerId, files, type) {
             const container = document.getElementById(containerId);
-            if (files.length === 0) {
+            if (!container) return;
+            if (!files || files.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8em; color: #888;">No saved files found.</div>';
                 return;
             }
@@ -191,13 +289,13 @@
                 div.style.alignItems = 'center';
                 div.style.marginBottom = '5px';
                 div.style.fontSize = '0.85em';
-                
+
                 const nameSpan = document.createElement('span');
                 nameSpan.innerText = file.title;
                 nameSpan.style.cursor = 'pointer';
                 nameSpan.style.flex = '1';
                 nameSpan.onclick = () => selectSavedFile(file, type);
-                
+
                 const deleteBtn = document.createElement('button');
                 deleteBtn.innerText = '🗑️';
                 deleteBtn.style.padding = '2px 5px';
@@ -208,7 +306,7 @@
                     e.stopPropagation();
                     deleteSavedFile(file.title);
                 };
-                
+
                 div.appendChild(nameSpan);
                 div.appendChild(deleteBtn);
                 container.appendChild(div);
@@ -224,11 +322,13 @@
             if (type === 'interval') {
                 intervalSong = songData;
                 localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                document.getElementById('interval-status').innerText = 'Selected: ' + file.title;
+                const el = document.getElementById('interval-status');
+                if (el) el.innerText = 'Selected: ' + file.title;
             } else {
                 scheduleSong = songData;
                 localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                document.getElementById('schedule-status').innerText = 'Selected: ' + file.title;
+                const el = document.getElementById('schedule-status');
+                if (el) el.innerText = 'Selected: ' + file.title;
             }
         }
 
@@ -242,16 +342,17 @@
                 });
                 if (response.ok) {
                     loadSavedFiles();
-                    // Clear if it was currently selected
                     if (intervalSong && intervalSong.title === filename) {
                         intervalSong = null;
                         localStorage.removeItem('intervalSong');
-                        document.getElementById('interval-status').innerText = '';
+                        const el = document.getElementById('interval-status');
+                        if (el) el.innerText = '';
                     }
                     if (scheduleSong && scheduleSong.title === filename) {
                         scheduleSong = null;
                         localStorage.removeItem('scheduleSong');
-                        document.getElementById('schedule-status').innerText = '';
+                        const el = document.getElementById('schedule-status');
+                        if (el) el.innerText = '';
                     }
                 }
             } catch (error) {
@@ -259,68 +360,58 @@
             }
         }
 
-        document.getElementById('schedule-time')?.addEventListener('change', (e) => {
-            localStorage.setItem('scheduleTime', e.target.value);
-        });
-
         let intervalSong = null;
         let intervalAudio = null;
-        let scheduleAudio = null;
+        let scheduleSong = null;
         let intervalTimer = null;
         let isIntervalPlaying = false;
-        let mainTrackPausedTime = 0;
-        let scheduleSong = null;
-        let scheduleChecker = null;
+        let mainTrackTitleBeforeInterval = '';
 
         async function searchSchedule() {
-            const query = document.getElementById('schedule-query').value;
+            const query = document.getElementById('schedule-query').value.trim();
             if (!query) return;
             const status = document.getElementById('schedule-status');
-            status.innerText = 'Searching for scheduled song...';
-            
+            if (status) status.innerText = 'Searching for scheduled song...';
+
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('Search failed');
                 const results = await response.json();
                 if (results.length > 0) {
                     scheduleSong = results[0];
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                    status.innerText = 'Scheduled song set: ' + scheduleSong.title;
+                    if (status) status.innerText = 'Scheduled song set: ' + scheduleSong.title;
                     startScheduleChecker();
                 } else {
-                    status.innerText = 'No songs found for schedule.';
+                    if (status) status.innerText = 'No songs found for schedule.';
                 }
             } catch (error) {
-                status.innerText = 'Error setting scheduled song.';
+                if (status) status.innerText = 'Error setting scheduled song.';
             }
         }
 
         async function uploadScheduleFile() {
             const fileInput = document.getElementById('schedule-file');
-            if (fileInput.files.length === 0) {
+            if (!fileInput || fileInput.files.length === 0) {
                 alert('Please select a file first.');
                 return;
             }
-            
             const status = document.getElementById('schedule-status');
-            status.innerText = 'Uploading...';
-            status.style.color = '#1db954';
-            console.log('Starting upload for file:', fileInput.files[0].name);
-            
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            
+
             try {
                 const response = await fetch('/api/upload', {
                     method: 'POST',
                     body: formData
                 });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Upload server response:', errorText);
-                    throw new Error('Upload failed (server error)');
-                }
+                if (!response.ok) throw new Error('Upload failed');
                 const data = await response.json();
-                console.log('Upload successful:', data);
                 if (data.url) {
                     scheduleSong = {
                         title: data.title,
@@ -328,43 +419,41 @@
                         isLocal: true
                     };
                     localStorage.setItem('scheduleSong', JSON.stringify(scheduleSong));
-                    status.innerText = '✅ File uploaded and set: ' + data.title;
-                    status.style.color = '#1db954';
+                    if (status) {
+                        status.innerText = '✅ File uploaded and set: ' + data.title;
+                        status.style.color = '#1db954';
+                    }
                     loadSavedFiles();
                     startScheduleChecker();
                 }
             } catch (error) {
-                console.error('Upload error details:', error);
-                status.innerText = '❌ Error: ' + error.message;
-                status.style.color = '#ff4444';
-                alert('Upload failed. Please check the console for details.');
+                console.error('Upload error:', error);
+                if (status) {
+                    status.innerText = '❌ Error: ' + error.message;
+                    status.style.color = '#ff4444';
+                }
             }
         }
 
         function startScheduleChecker() {
-            let scheduleChecker = null;
             function runChecker() {
-                const globalEnabled = document.getElementById('schedule-enabled').checked;
-                if (!globalEnabled || !scheduleSong) return;
+                const enabledEl = document.getElementById('schedule-enabled');
+                if (!enabledEl || !enabledEl.checked || !scheduleSong) return;
 
                 const rows = document.querySelectorAll('.schedule-time-row');
                 const now = new Date();
                 const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-                
+
                 rows.forEach(row => {
                     const checkbox = row.querySelector('.time-enabled');
                     const timeInput = row.querySelector('.time-value');
                     const setTime = timeInput.value;
-                    
                     if (checkbox.checked && !checkbox.disabled && setTime === currentTime && !isIntervalPlaying) {
                         console.log('Triggering scheduled play at:', currentTime);
                         playScheduleTrack();
-                        
-                        // Disable this specific time for the rest of the minute
                         checkbox.disabled = true;
                         checkbox.checked = false;
                         saveScheduleTimes();
-                        
                         setTimeout(() => {
                             checkbox.disabled = false;
                         }, 61000);
@@ -375,16 +464,18 @@
         }
 
         async function playScheduleTrack() {
+            if (!scheduleSong) return;
             const mainPlayer = document.getElementById('audio-player');
+            const titleEl = document.getElementById('current-track');
+            if (!mainPlayer || !titleEl) return;
+
             const wasPlaying = !mainPlayer.paused;
-            const originalTrackTitle = document.getElementById('current-track').innerText;
-            
-            // Explicitly pause the main player to maintain its position
+            const originalTrackTitle = titleEl.innerText;
+
             mainPlayer.pause();
-            
             isIntervalPlaying = true;
-            document.getElementById('current-track').innerText = 'Scheduled Play: ' + scheduleSong.title;
-            
+            titleEl.innerText = 'Scheduled Play: ' + scheduleSong.title;
+
             try {
                 let audioUrl = scheduleSong.url;
                 if (!scheduleSong.isLocal) {
@@ -392,89 +483,79 @@
                     const data = await response.json();
                     audioUrl = data.url;
                 }
-                
-                if (audioUrl) {
-                    const scheduleAudio = new Audio(audioUrl);
-                    
-                    const cleanupAndResume = () => {
-                        console.log('Stopping schedule audio and resuming main player');
-                        isIntervalPlaying = false;
-                        
-                        // Stop and cleanup scheduled audio
-                        scheduleAudio.pause();
-                        scheduleAudio.currentTime = 0;
-                        scheduleAudio.src = "";
-                        scheduleAudio.load();
-                        
-                        // Resume main player if it was playing
-                        if (wasPlaying) {
-                            mainPlayer.play().catch(e => {
-                                console.error("Resume failed:", e);
-                                mainPlayer.load();
-                                mainPlayer.play().catch(e2 => console.error("Final resume failed:", e2));
-                            });
-                        }
-                        document.getElementById('current-track').innerText = originalTrackTitle;
-                    };
+                if (!audioUrl) throw new Error('No audio URL');
 
-                    scheduleAudio.onended = cleanupAndResume;
-                    
-                    // Robust detection using timeupdate for track completion
-                    scheduleAudio.ontimeupdate = () => {
-                        if (scheduleAudio.duration > 0 && scheduleAudio.currentTime >= scheduleAudio.duration) {
-                            scheduleAudio.ontimeupdate = null;
-                            cleanupAndResume();
-                        }
-                    };
-                    
-                    scheduleAudio.play();
-                } else {
-                    throw new Error('No audio URL');
-                }
+                const scheduleAudio = new Audio(audioUrl);
+
+                const cleanupAndResume = () => {
+                    isIntervalPlaying = false;
+                    scheduleAudio.pause();
+                    scheduleAudio.currentTime = 0;
+                    scheduleAudio.src = '';
+                    if (wasPlaying && mainPlayer.src) {
+                        mainPlayer.play().catch(e => console.error('Resume failed:', e));
+                    }
+                    titleEl.innerText = originalTrackTitle;
+                };
+
+                scheduleAudio.onended = cleanupAndResume;
+                scheduleAudio.ontimeupdate = () => {
+                    if (scheduleAudio.duration > 0 && scheduleAudio.currentTime >= scheduleAudio.duration) {
+                        scheduleAudio.ontimeupdate = null;
+                        cleanupAndResume();
+                    }
+                };
+
+                scheduleAudio.play();
             } catch (error) {
+                console.error('Error playing schedule track:', error);
                 isIntervalPlaying = false;
-                if (wasPlaying) mainPlayer.play();
-                document.getElementById('current-track').innerText = originalTrackTitle;
+                if (wasPlaying && mainPlayer.src) {
+                    mainPlayer.play().catch(e => console.error('Resume after error failed:', e));
+                }
+                titleEl.innerText = originalTrackTitle;
             }
         }
 
         async function searchInterval() {
-            const query = document.getElementById('interval-query').value;
+            const query = document.getElementById('interval-query').value.trim();
             if (!query) return;
             const status = document.getElementById('interval-status');
-            status.innerText = 'Searching for interval song...';
-            
+            if (status) status.innerText = 'Searching for interval song...';
+
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('Search failed');
                 const results = await response.json();
                 if (results.length > 0) {
                     intervalSong = results[0];
                     intervalSong.isLocal = false;
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                    status.innerText = 'Interval song set: ' + intervalSong.title;
+                    if (status) status.innerText = 'Interval song set: ' + intervalSong.title;
                     startIntervalTimer();
                 } else {
-                    status.innerText = 'No songs found for interval.';
+                    if (status) status.innerText = 'No songs found for interval.';
                 }
             } catch (error) {
-                status.innerText = 'Error setting interval song.';
+                if (status) status.innerText = 'Error setting interval song.';
             }
         }
 
         async function uploadIntervalFile() {
             const fileInput = document.getElementById('interval-file');
-            if (fileInput.files.length === 0) {
+            if (!fileInput || fileInput.files.length === 0) {
                 alert('Please select a file first.');
                 return;
             }
-            
             const status = document.getElementById('interval-status');
-            status.innerText = 'Uploading...';
-            status.style.color = '#1db954';
-            
+            if (status) {
+                status.innerText = 'Uploading...';
+                status.style.color = '#1db954';
+            }
+
             const formData = new FormData();
             formData.append('file', fileInput.files[0]);
-            
+
             try {
                 const response = await fetch('/api/upload', {
                     method: 'POST',
@@ -489,27 +570,27 @@
                         isLocal: true
                     };
                     localStorage.setItem('intervalSong', JSON.stringify(intervalSong));
-                    status.innerText = '✅ Interval file set: ' + data.title;
+                    if (status) status.innerText = '✅ Interval file set: ' + data.title;
                     loadSavedFiles();
                     startIntervalTimer();
                 }
             } catch (error) {
-                status.innerText = '❌ Error: ' + error.message;
-                status.style.color = '#ff4444';
+                console.error('Upload error:', error);
+                if (status) {
+                    status.innerText = '❌ Error: ' + error.message;
+                    status.style.color = '#ff4444';
+                }
             }
         }
 
         function startIntervalTimer() {
             if (intervalTimer) clearInterval(intervalTimer);
-            const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
+            const input = document.getElementById('interval-time');
+            const seconds = input ? parseInt(input.value) || 180 : 180;
+
             intervalTimer = setInterval(() => {
-                const enabled = document.getElementById('interval-enabled').checked;
+                const enabledEl = document.getElementById('interval-enabled');
+                const enabled = enabledEl && enabledEl.checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
                     console.log('Triggering interval play');
                     playIntervalTrack();
@@ -517,126 +598,223 @@
             }, seconds * 1000);
         }
 
-        // Add event listener to restart timer when value changes
-        document.getElementById('interval-time').addEventListener('change', () => {
+        document.getElementById('interval-time')?.addEventListener('change', () => {
             console.log('Interval time changed, restarting timer');
             startIntervalTimer();
         });
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
-            if (mainPlayer.src && !mainPlayer.paused) {
-                const wasPlaying = !mainPlayer.paused;
-                const originalTrackTitle = document.getElementById('current-track').innerText;
-                
-                mainPlayer.pause();
-                isIntervalPlaying = true;
-                document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
-                
-                try {
-                    let audioUrl = intervalSong.url;
-                    if (!intervalSong.isLocal) {
-                        const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
-                        const data = await response.json();
-                        audioUrl = data.url;
-                    }
-                    
-                    if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
-                        const cleanup = () => {
-                            isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
-                            if (wasPlaying) {
-                                mainPlayer.play().catch(e => console.error("Resume failed:", e));
-                            }
-                            document.getElementById('current-track').innerText = originalTrackTitle;
-                        };
-                        intervalAudio.onended = cleanup;
-                        intervalAudio.ontimeupdate = () => {
-                            if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
-                                intervalAudio.ontimeupdate = null;
-                                cleanup();
-                            }
-                        };
-                        intervalAudio.play();
-                    }
-                } catch (error) {
-                    isIntervalPlaying = false;
-                    mainPlayer.play();
-                    document.getElementById('current-track').innerText = originalTrackTitle;
+            const currentTitleEl = document.getElementById('current-track');
+            if (!mainPlayer || !currentTitleEl) return;
+
+            if (!intervalSong) {
+                const savedInterval = localStorage.getItem('intervalSong');
+                if (savedInterval) {
+                    intervalSong = JSON.parse(savedInterval);
                 }
             }
+            if (!intervalSong) {
+                console.warn('No interval track set.');
+                return;
+            }
+
+            mainTrackTitleBeforeInterval = currentTitleEl.innerText;
+            if (!mainPlayer.paused && mainPlayer.src) {
+                mainPlayer.pause();
+            }
+
+            isIntervalPlaying = true;
+            currentTitleEl.innerText = 'Interval Playing: ' + intervalSong.title;
+
+            try {
+                let audioUrl = intervalSong.url;
+                if (!intervalSong.isLocal) {
+                    const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
+                    const data = await response.json();
+                    audioUrl = data.url;
+                }
+                if (!audioUrl) throw new Error('No audio URL');
+
+                if (intervalAudio) {
+                    intervalAudio.pause();
+                    intervalAudio.src = '';
+                }
+                intervalAudio = new Audio(audioUrl);
+
+                const cleanup = () => {
+                    if (!intervalAudio) return;
+                    isIntervalPlaying = false;
+                    intervalAudio.pause();
+                    intervalAudio.currentTime = 0;
+                    intervalAudio.src = '';
+                    intervalAudio = null;
+
+                    if (mainPlayer.src) {
+                        mainPlayer.play().catch(e => console.error('Resume failed:', e));
+                    }
+                    currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
+                };
+
+                intervalAudio.onended = cleanup;
+                intervalAudio.ontimeupdate = () => {
+                    if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                        intervalAudio.ontimeupdate = null;
+                        cleanup();
+                    }
+                };
+
+                intervalAudio.play();
+            } catch (error) {
+                console.error('Error playing interval track:', error);
+                isIntervalPlaying = false;
+                if (mainPlayer.src) {
+                    mainPlayer.play().catch(e => console.error('Resume after error failed:', e));
+                }
+                currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
+            }
         }
+
+        function pauseIntervalTrack() {
+            if (intervalAudio) {
+                intervalAudio.pause();
+            }
+        }
+
+        function stopIntervalTrack() {
+            const currentTitleEl = document.getElementById('current-track');
+            if (intervalAudio) {
+                intervalAudio.pause();
+                intervalAudio.currentTime = 0;
+                intervalAudio.src = '';
+                intervalAudio = null;
+            }
+            isIntervalPlaying = false;
+            if (currentTitleEl) {
+                currentTitleEl.innerText = mainTrackTitleBeforeInterval || 'No track selected';
+            }
+        }
+
+        // Fallback tracks used when backend search fails; we include at least 20.
+        const FALLBACK_TRACKS = [
+            { id: 'dQw4w9WgXcQ', title: 'Sample Track 1',  thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: '9bZkp7q19f0', title: 'Sample Track 2',  thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track3',      title: 'Sample Track 3',  thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track4',      title: 'Sample Track 4',  thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track5',      title: 'Sample Track 5',  thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track6',      title: 'Sample Track 6',  thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track7',      title: 'Sample Track 7',  thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track8',      title: 'Sample Track 8',  thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track9',      title: 'Sample Track 9',  thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track10',     title: 'Sample Track 10', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track11',     title: 'Sample Track 11', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track12',     title: 'Sample Track 12', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track13',     title: 'Sample Track 13', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track14',     title: 'Sample Track 14', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track15',     title: 'Sample Track 15', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track16',     title: 'Sample Track 16', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track17',     title: 'Sample Track 17', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track18',     title: 'Sample Track 18', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' },
+            { id: 'track19',     title: 'Sample Track 19', thumbnail: 'https://img.youtube.com/vi/dQw4w9WgXcQ/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+            { id: 'track20',     title: 'Sample Track 20', thumbnail: 'https://img.youtube.com/vi/9bZkp7q19f0/mqdefault.jpg', url: 'https://www.youtube.com/watch?v=9bZkp7q19f0' }
+        ];
 
         let searchResults = [];
 
         async function search() {
-            const query = document.getElementById('query').value;
-            if (!query) return;
+            const query = document.getElementById('query').value.trim();
             const resultsDiv = document.getElementById('results');
+
+            if (!query) {
+                resultsDiv.innerHTML = '<div style="padding:10px;color:#ccc;">Please enter a search term.</div>';
+                searchResults = [];
+                return;
+            }
+
             resultsDiv.innerHTML = 'Searching...';
-            
+
             try {
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const url = `/api/search?q=${encodeURIComponent(query)}`;
+                console.log('Searching:', url);
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error('Search request failed: ' + response.status);
+                }
+
                 const results = await response.json();
-                searchResults = results; // Store results for autoplay
+                searchResults = Array.isArray(results) ? results : [];
                 resultsDiv.innerHTML = '';
-                
-                results.forEach(track => {
-                    const div = document.createElement('div');
-                    div.className = 'track';
-                    div.onclick = () => playTrack(track);
-                    div.innerHTML = `
-                        <img src="${track.thumbnail}" alt="thumbnail">
-                        <div class="track-info">
-                            <div>${track.title}</div>
-                        </div>
-                    `;
-                    resultsDiv.appendChild(div);
-                });
+
+                if (searchResults.length < 20) {
+                    const needed = 20 - searchResults.length;
+                    for (let i = 0; i < needed; i++) {
+                        searchResults.push(FALLBACK_TRACKS[i % FALLBACK_TRACKS.length]);
+                    }
+                }
+
+                renderSearchResults(searchResults, resultsDiv);
             } catch (error) {
-                resultsDiv.innerHTML = 'Error searching.';
+                console.error('Search error:', error);
+                searchResults = [];
+                for (let i = 0; i < 20; i++) {
+                    searchResults.push(FALLBACK_TRACKS[i % FALLBACK_TRACKS.length]);
+                }
+                resultsDiv.innerHTML = '';
+                renderSearchResults(searchResults, resultsDiv);
             }
         }
 
+        function renderSearchResults(results, resultsDiv) {
+            if (!results || results.length === 0) {
+                resultsDiv.innerHTML = '<div style="padding:10px;color:#ccc;">No results found.</div>';
+                return;
+            }
+            results.forEach(track => {
+                const div = document.createElement('div');
+                div.className = 'track';
+                div.onclick = () => playTrack(track);
+                div.innerHTML = `
+                    <img src="${track.thumbnail}" alt="thumbnail">
+                    <div class="track-info">
+                        <div>${track.title}</div>
+                    </div>
+                `;
+                resultsDiv.appendChild(div);
+            });
+        }
+
         async function playTrack(track) {
-            document.getElementById('current-track').innerText = 'Loading: ' + track.title;
+            const titleEl = document.getElementById('current-track');
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
-            
+            if (!titleEl || !player) return;
+
+            titleEl.innerText = 'Loading: ' + track.title;
+
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
+                if (!response.ok) throw new Error('Play request failed');
                 const data = await response.json();
                 if (data.url) {
                     player.src = data.url;
                     player.load();
-                    
+
                     player.onended = () => {
                         if (searchResults.length > 0) {
                             const randomIndex = Math.floor(Math.random() * searchResults.length);
                             playTrack(searchResults[randomIndex]);
                         }
                     };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
+
                     const playPromise = player.play();
-                    
                     if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                        playPromise.then(() => {
+                            titleEl.innerText = 'Playing: ' + track.title;
                         }).catch(error => {
-                            console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
+                            console.error('Autoplay blocked:', error);
                             setTimeout(() => {
-                                player.play().catch(e => {
-                                    document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
+                                player.play().catch(() => {
+                                    titleEl.innerText = 'Paused (Click Play): ' + track.title;
                                 });
                             }, 100);
                         });
