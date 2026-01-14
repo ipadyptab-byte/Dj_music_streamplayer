@@ -61,13 +61,19 @@ def search_youtube(query):
             search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
             results = []
             if search_results and 'entries' in search_results:
+                q = (query or "").lower()
                 for entry in search_results['entries']:
                     if not entry:
+                        continue
+                    title = entry.get('title') or ""
+                    # Keep only videos whose title contains the query text (case‑insensitive)
+                    # so that results are more obviously related to the user input.
+                    if q and q not in title.lower():
                         continue
                     video_id = entry.get('id')
                     results.append({
                         'id': video_id,
-                        'title': entry.get('title'),
+                        'title': title,
                         'thumbnail': f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
                         'url': f"https://www.youtube.com/watch?v={video_id}"
                     })
