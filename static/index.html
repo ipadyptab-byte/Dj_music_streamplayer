@@ -579,10 +579,24 @@
             
             try {
                 const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-                const results = await response.json();
+                let results = await response.json();
+
+                // Frontend safety filter: remove any sample/demo tracks completely.
+                // This ensures you never see "Sample Track" or similar entries,
+                // even if they slip through from YouTube.
+                results = results.filter(track => {
+                    const title = (track.title || '').toLowerCase();
+                    return !title.includes('sample') && !title.includes('demo');
+                });
+
                 searchResults = results; // Store results for autoplay
                 resultsDiv.innerHTML = '';
                 
+                if (results.length === 0) {
+                    resultsDiv.innerHTML = 'No related YouTube results found.';
+                    return;
+                }
+
                 results.forEach(track => {
                     const div = document.createElement('div');
                     div.className = 'track';
