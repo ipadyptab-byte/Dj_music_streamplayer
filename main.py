@@ -10,12 +10,17 @@ from threading import Timer
 # PyInstaller-safe base directory
 # ===============================
 if getattr(sys, 'frozen', False):
+    # When packaged (PyInstaller), static files live in the temp
+    # extraction directory, but user data (uploads) should live
+    # next to the executable so it persists between runs.
+    EXEC_DIR = os.path.dirname(sys.executable)
     BASE_DIR = sys._MEIPASS
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    EXEC_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = EXEC_DIR
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_FOLDER = os.path.join(EXEC_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
