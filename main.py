@@ -140,8 +140,18 @@ def play():
     video_url = request.args.get('url')
     if not video_url:
         return jsonify({'error': 'No URL provided'}), 400
+
+    # Try to get a direct audio stream URL via yt_dlp
     audio_url = get_audio_url(video_url)
-    return jsonify({'url': audio_url}) if audio_url else jsonify({'error': 'Failed'}), 500
+
+    if audio_url:
+        return jsonify({'url': audio_url})
+
+    # Fallback: if yt_dlp fails (e.g. no network / blocked), at least return
+    # the original URL so the frontend does not see a 500 error.
+    # Some environments/browsers may still be able to play it directly.
+    print("get_audio_url failed; falling back to original URL:", video_url)
+    return jsonify({'url': video_url})
 
 @app.route('/api/files')
 def list_files():
