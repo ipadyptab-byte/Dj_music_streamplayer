@@ -49,32 +49,45 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 def search_youtube(query):
+    # Use yt-dlp to search YouTube and return simple metadata for each result.
+    # This version avoids extract_flat (which can fail in some environments)
+    # and uses the standard "ytsearch" mechanism.
+    if not query:
+        return []
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
         'quiet': True,
-        'extract_flat': True,
         'no_warnings': True,
+        'default_search': 'ytsearch',
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
-            results = []
-            if search_results and 'entries' in search_results:
-                for entry in search_results['entries']:
-                    if not entry:
-                        continue
-                    video_id = entry.get('id')
-                    results.append({
-                        'id': video_id,
-                        'title': entry.get('title'),
-                        'thumbnail': f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
-                        'url': f"https://www.youtube.com/watch?v={video_id}"
-                    })
-            return results
-        except Exception as e:
-            print(e)
-            return []
+    except Exception as e:
+        # Log error so you can see it in the server console
+        print("YouTube search error:", e)
+        return []
+
+    results = []
+    if not search_results:
+        return results
+
+    entries = search_results.get('entries') or []
+    for entry in entries:
+        if not entry:
+            continue
+        video_id = entry.get('id')
+        if not video_id:
+            continue
+        results.append({
+            'id': video_id,
+            'title': entry.get('title'),
+            'thumbnail': f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
+            'url': f"https://www.youtube.com/watch?v={video_id}",
+        })
+    return results
 
 def get_audio_url(video_url):
     ydl_opts = {
