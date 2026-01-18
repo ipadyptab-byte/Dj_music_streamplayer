@@ -500,23 +500,42 @@
         }
 
         function startIntervalTimer() {
-            if (intervalTimer) clearInterval(intervalTimer);
+            // Clear any existing one-shot timer
+            if (intervalTimer) clearTimeout(intervalTimer);
+            
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
-            
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
-            intervalTimer = setInterval(() => {
-                const enabled = document.getElementById('interval-enabled').checked;
-                if (enabled && intervalSong && !isIntervalPlaying) {
-                    console.log('Triggering interval play');
+            const enabled = document.getElementById('interval-enabled').checked;
+
+            // Only arm the timer if the feature is enabled and an interval song is selected
+            if (!enabled || !intervalSong) {
+                return;
+            }
+
+            // One-shot timer: fires once after the configured delay
+            intervalTimer = setTimeout(() => {
+                const stillEnabled = document.getElementById('interval-enabled').checked;
+                const mainPlayer = document.getElementById('audio-player');
+
+                // Only play the interval track if:
+                //  - interval feature is still enabled
+                //  - we still have an interval song
+                //  - no other interval/schedule track is currently playing
+                //  - main track is actually playing
+                if (
+                    stillEnabled &&
+                    intervalSong &&
+                    !isIntervalPlaying &&
+                    mainPlayer.src &&
+                    !mainPlayer.paused
+                ) {
+                    console.log('Triggering interval play (one-shot)');
                     playIntervalTrack();
                 }
+                // After this fires, it does NOT automatically schedule another one.
+                // The next main track (or a manual restart) will call startIntervalTimer() again.
             }, seconds * 1000);
         }
-
+        
         // Add event listener to restart timer when value changes
         document.getElementById('interval-time').addEventListener('change', () => {
             console.log('Interval time changed, restarting timer');
