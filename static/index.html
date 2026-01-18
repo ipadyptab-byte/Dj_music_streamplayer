@@ -631,11 +631,17 @@
                     if (playPromise !== undefined) {
                         playPromise.then(_ => {
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                            // Restart interval timer so that interval track
+                            // runs at the configured seconds for each new main track
+                            startIntervalTimer();
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
                             // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
-                                player.play().catch(e => {
+                                player.play().then(() => {
+                                    document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                                    startIntervalTimer();
+                                }).catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
                                 });
                             }, 100);
