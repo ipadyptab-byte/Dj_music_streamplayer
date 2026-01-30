@@ -77,8 +77,10 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
+    # Prefer an m4a (AAC) audio stream, which is widely supported by HTML5
+    # audio across browsers. Fall back to bestaudio/best if not available.
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'quiet': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
