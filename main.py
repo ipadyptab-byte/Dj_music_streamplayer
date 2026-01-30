@@ -83,6 +83,9 @@ def get_audio_url(video_url):
     - Opus/WebM (open codec, well supported on many Linux builds)
     - M4A/AAC
     - Whatever yt-dlp thinks is best
+
+    We also force a non-SABR compatible client (android) to avoid
+    formats that require JS decryption and SABR-only manifests.
     """
     ydl_opts = {
         'format': (
@@ -92,6 +95,12 @@ def get_audio_url(video_url):
             'bestaudio/best'
         ),
         'quiet': True,
+        'extractor_args': {
+            'youtube': {
+                # Use Android client to avoid SABR-only web formats
+                'player_client': ['android']
+            }
+        },
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
