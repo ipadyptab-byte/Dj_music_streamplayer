@@ -77,34 +77,40 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
-    """Download audio for the given YouTube URL and return a local file URL.
+    """Return a direct audio stream URL for a YouTube video.
 
-    This avoids browser "NotSupportedError" issues with some remote stream
-    formats by always serving a simple local file from /api/uploads.
+    We only *extract* info (no download) and hand the browser a working
+    audio URL from the available formats. This avoids the server-side
+    403 errors you saw when trying to download.
     """
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
         'no_warnings': True,
-        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], '%(id)s.%(ext)s'),
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            # This gives us the exact path yt_dlp wrote to
-            file_path = ydl.prepare_filename(info)
+            info = ydl.extract_info(video_url, download=False)
     except Exception as e:
-        print("yt_dlp error while getting/downloading audio:", e)
+        print("yt_dlp error while extracting audio info:", e)
         return None
 
-    if not file_path or not os.path.exists(file_path):
+    if not info:
         return None
 
-    filename = os.path.basename(file_path)
-    # Return URL that our Flask app can serve
-    return f'/api/uploads/{filename}'
+    # 1) Prefer top-level URL if yt-dlp provides it
+    direct_url = info.get('url')
+    if direct_url:
+        return direct_url
+
+    # 2) Fallback: scan formats for an audio-containing stream
+    for fmt in info.get('formats', []):
+        if fmt.get('acodec') and fmt.get('acodec') != 'none' and fmt.get('url'):
+            return fmt['url']
+
+    return None
 
 @app.route('/')
 def index():
