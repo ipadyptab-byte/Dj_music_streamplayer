@@ -77,36 +77,34 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
-    """Return a direct audio stream URL for a YouTube video.
+    """Download audio for the given YouTube URL and return a local file URL.
 
-    Newer YouTube layouts sometimes do not expose a top-level "url" key.
-    In that case we fall back to inspecting the available formats and
-    pick the first one that actually has audio.
+    This avoids browser "NotSupportedError" issues with some remote stream
+    formats by always serving a simple local file from /api/uploads.
     """
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
+        'noplaylist': True,
+        'no_warnings': True,
+        'outtmpl': os.path.join(app.config['UPLOAD_FOLDER'], '%(id)s.%(ext)s'),
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
-            info = ydl.extract_info(video_url, download=False)
 
-            # 1) Prefer top-level URL if yt-dlp provides it
-            direct_url = info.get('url')
-            if direct_url:
-                return direct_url
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(video_url, download=True)
+            # This gives us the exact path yt_dlp wrote to
+            file_path = ydl.prepare_filename(info)
+    except Exception as e:
+        print("yt_dlp error while getting/downloading audio:", e)
+        return None
 
-            # 2) Fallback: scan formats for an audio‑only (or audio‑containing) stream
-            for fmt in info.get('formats', []):
-                # Some formats have acodec == 'none' when they are video‑only
-                if fmt.get('acodec') and fmt.get('acodec') != 'none' and fmt.get('url'):
-                    return fmt['url']
+    if not file_path or not os.path.exists(file_path):
+        return None
 
-            # Nothing usable found
-            return None
-        except Exception as e:
-            print("yt_dlp error while getting audio URL:", e)
-            return None
+    filename = os.path.basename(file_path)
+    # Return URL that our Flask app can serve
+    return f'/api/uploads/{filename}'
 
 @app.route('/')
 def index():
