@@ -1,12 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory
-from werkzeug.utils import secure_filename
-import yt_dlp
-import os
-import sys
-import webbrowser
-from threading import Timer
-
+> ===============================
+# PyInstaller-safe base directory
 # ===============================
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))hr</old_code><new_code># ===============================
 # PyInstaller-safe base directory
 # ===============================
 if getattr(sys, 'frozen', False):
@@ -19,7 +17,26 @@ UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Path to VLC executable. If VLC is on PATH, just 'vlc' works.
+# You can also point this to a bundled vlc.exe next to your app.
+VLC_PATH = os.environ.get('VLC_PATH', 'vlc')
+
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+in</old_code><new_code>UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Path to VLC executable. If VLC is on PATH, just 'vlc' works.
+# You can also point this to a bundled vlc.exe next to your app.
+VLC_PATH = os.environ.get('VLC_PATH', 'vlc')
+
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')= os.path.join(BASE_DIR, 'uploads')
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+#pp = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
@@ -46,7 +63,41 @@ def upload_file():
 
 @app.route('/api/uploads/<filename>')
 def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    return send_from flask import Flask, request, jsonify, send_from_directory
+from werkzeug.utils import secure_filename
+import yt_dlp
+import os
+import sys
+import webbrowser
+import subprocess
+from threading import Timer
+
+# ===============================
+# PyInstaller-safe base directory
+# ===============================
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Path to VLC executable. If VLC is on PATH, just 'vlc' works.
+# You can also point this to a bundled vlc.exe next to your app.
+VLC_PATH = os.environ.get('VLC_PATH', 'vlc')
+
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+
+# ===============================
+# Auto-open browser
+# ===============================
+def open_browser():
+    webbrowser.open("http://127.0.0.1:5000")_directory(app.config['UPLOAD_FOLDER'], filename)
 
 def search_youtube(query):
     ydl_opts = {
