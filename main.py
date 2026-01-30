@@ -105,12 +105,25 @@ def get_audio_url(video_url):
     if direct_url:
         return direct_url
 
-    # 2) Fallback: scan formats for an audio-containing stream
-    for fmt in info.get('formats', []):
+    # 2) Fallback: pick an audio-containing stream, preferring common formats
+    formats = info.get('formats', []) or []
+
+    # Prefer m4a/mp4/mp3 audio which are widely supported by browsers on Windows
+    preferred_exts = {"m4a", "mp4", "mp3"}
+
+    # First pass: preferred extensions with audio
+    for fmt in formats:
+        if (fmt.get('acodec') and fmt.get('acodec') != 'none'
+                and fmt.get('ext') in preferred_exts and fmt.get('url')):
+            return fmt['url']
+
+    # Second pass: any format that has an audio codec and a URL
+    for fmt in formats:
         if fmt.get('acodec') and fmt.get('acodec') != 'none' and fmt.get('url'):
             return fmt['url']
 
     return None
+
 
 @app.route('/')
 def index():
