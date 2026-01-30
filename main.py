@@ -77,10 +77,20 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
-    # Prefer an m4a (AAC) audio stream, which is widely supported by HTML5
-    # audio across browsers. Fall back to bestaudio/best if not available.
+    """Return a direct audio URL that the browser can play.
+
+    We try, in order:
+    - Opus/WebM (open codec, well supported on many Linux builds)
+    - M4A/AAC
+    - Whatever yt-dlp thinks is best
+    """
     ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'format': (
+            'bestaudio[acodec^=opus]/'
+            'bestaudio[ext=webm]/'
+            'bestaudio[ext=m4a]/'
+            'bestaudio/best'
+        ),
         'quiet': True,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
