@@ -674,18 +674,35 @@
             }
         }
 
-        async function playTrack(track) {
+        async function playTrack(track, attempt = 0) {
             const statusEl = document.getElementById('current-track');
-            statusEl.innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
+            const maxAttempts = Math.min((searchResults.length || 5), 10);
+
+            statusEl.innerText = 'Loading: ' + track.title;
 
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
+
+                if (!response.ok) {
+                    console.error('Backend returned error for play:', response.status);
+                    if (attempt + 1 < maxAttempts && searchResults.length > 1) {
+                        const randomIndex = Math.floor(Math.random() * searchResults.length);
+                        return playTrack(searchResults[randomIndex], attempt + 1);
+                    }
+                    statusEl.innerText = 'Cannot play this track (server error). Try another one.';
+                    return;
+                }
+
                 const data = await response.json();
 
-                // If backend did not return a playable URL, do not attempt to play.
+                // If backend did not return a playable URL, skip to another track.
                 if (!data.url) {
                     console.error('Backend did not return a playable URL for track', track, 'response:', data);
+                    if (attempt + 1 < maxAttempts && searchResults.length > 1) {
+                        const randomIndex = Math.floor(Math.random() * searchResults.length);
+                        return playTrack(searchResults[randomIndex], attempt + 1);
+                    }
                     statusEl.innerText = 'Cannot play this track (no supported audio). Try another one.';
                     return;
                 }
@@ -709,11 +726,19 @@
                         })
                         .catch(error => {
                             console.error('Playback failed:', error);
+                            if (attempt + 1 < maxAttempts && searchResults.length > 1) {
+                                const randomIndex = Math.floor(Math.random() * searchResults.length);
+                                return playTrack(searchResults[randomIndex], attempt + 1);
+                            }
                             statusEl.innerText = 'Paused (Click Play): ' + track.title;
                         });
                 }
             } catch (error) {
                 console.error('Error playing track:', error);
+                if (attempt + 1 < maxAttempts && searchResults.length > 1) {
+                    const randomIndex = Math.floor(Math.random() * searchResults.length);
+                    return playTrack(searchResults[randomIndex], attempt + 1);
+                }
                 statusEl.innerText = 'Error loading track.';
             }
         }
