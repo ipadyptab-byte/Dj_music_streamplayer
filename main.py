@@ -77,17 +77,53 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
+    """Return a direct audio stream URL for a YouTube video.
+
+    We only *extract* info (no download) and hand the browser a working
+    audio URL from the available formats. This avoids the server-side
+    403 errors you saw when trying to download.
+    """
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
+        'noplaylist': True,
+        'no_warnings': True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            return info.get('url')
-        except Exception as e:
-            print(e)
-            return None
+    except Exception as e:
+        print("yt_dlp error while extracting audio info:", e)
+        return None
+
+    if not info:
+        return None
+
+    # 1) Prefer top-level URL if yt-dlp provides it
+    direct_url = info.get('url')
+    if direct_url:
+        return direct_url
+
+    # 2) Fallback: pick an audio-containing stream, preferring common formats
+    formats = info.get('formats', []) or []
+
+    # Prefer m4a/mp4/mp3 audio which are widely supported by browsers on Windows
+    preferred_exts = {"m4a", "mp4", "mp3"}
+
+    # First pass: preferred extensions with audio
+    for fmt in formats:
+        if (fmt.get('acodec') and fmt.get('acodec') != 'none'
+                and fmt.get('ext') in preferred_exts and fmt.get('url')):
+            return fmt['url']
+
+    # Second pass: any format that has an audio codec and a URL
+    for fmt in formats:
+        if fmt.get('acodec') and fmt.get('acodec') != 'none' and fmt.get('url'):
+            return fmt['url']
+
+    return None
+
 
 @app.route('/')
 def index():
@@ -103,8 +139,14 @@ def play():
     video_url = request.args.get('url')
     if not video_url:
         return jsonify({'error': 'No URL provided'}), 400
+
     audio_url = get_audio_url(video_url)
-    return jsonify({'url': audio_url}) if audio_url else jsonify({'error': 'Failed'}), 500
+    if not audio_url:
+        # Explicit 500 only when we truly failed to resolve a stream URL
+        return jsonify({'error': 'Failed to resolve audio stream'}), 500
+
+    # Normal success path – HTTP 200 with the audio stream URL
+    return jsonify({'url': audio_url})
 
 @app.route('/api/files')
 def list_files():

@@ -685,36 +685,40 @@
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                 const data = await response.json();
-                if (data.url) {
-                    player.src = data.url;
-                    player.load();
-                    
-                    player.onended = () => {
-                        if (searchResults.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * searchResults.length);
-                            playTrack(searchResults[randomIndex]);
-                        }
-                    };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
-                    const playPromise = player.play();
-                    
-                    if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            document.getElementById('current-track').innerText = 'Playing: ' + track.title;
-                        }).catch(error => {
-                            console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
-                            setTimeout(() => {
-                                player.play().catch(e => {
-                                    document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
-                                });
-                            }, 100);
-                        });
+                if (!data.url) {
+                    console.error('Backend did not return an audio URL for this track', data);
+                    document.getElementById('current-track').innerText = 'Cannot play this track (no audio stream found). Try another result.';
+                    return;
+                }
+
+                player.src = data.url;
+                player.load();
+                
+                player.onended = () => {
+                    if (searchResults.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * searchResults.length);
+                        playTrack(searchResults[randomIndex]);
                     }
+                };
+                
+                // Most reliable way to ensure playback without user interaction
+                // is to trigger it directly from an event or as a continuation.
+                // Since we are in the call stack of 'onended' for the previous track,
+                // some browsers allow this if we don't await too much.
+                const playPromise = player.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(_ => {
+                        document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                    }).catch(error => {
+                        console.error("Autoplay blocked:", error);
+                        // If it still fails, we try one more time after a tiny delay
+                        setTimeout(() => {
+                            player.play().catch(e => {
+                                document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
+                            });
+                        }, 100);
+                    });
                 }
             } catch (error) {
                 console.error('Error playing track:', error);
