@@ -77,6 +77,12 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
+    """Return a direct audio stream URL for a YouTube video.
+
+    Newer YouTube layouts sometimes do not expose a top-level "url" key.
+    In that case we fall back to inspecting the available formats and
+    pick the first one that actually has audio.
+    """
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
@@ -84,9 +90,22 @@ def get_audio_url(video_url):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
             info = ydl.extract_info(video_url, download=False)
-            return info.get('url')
+
+            # 1) Prefer top-level URL if yt-dlp provides it
+            direct_url = info.get('url')
+            if direct_url:
+                return direct_url
+
+            # 2) Fallback: scan formats for an audio‑only (or audio‑containing) stream
+            for fmt in info.get('formats', []):
+                # Some formats have acodec == 'none' when they are video‑only
+                if fmt.get('acodec') and fmt.get('acodec') != 'none' and fmt.get('url'):
+                    return fmt['url']
+
+            # Nothing usable found
+            return None
         except Exception as e:
-            print(e)
+            print("yt_dlp error while getting audio URL:", e)
             return None
 
 @app.route('/')
@@ -103,8 +122,14 @@ def play():
     video_url = request.args.get('url')
     if not video_url:
         return jsonify({'error': 'No URL provided'}), 400
+
     audio_url = get_audio_url(video_url)
-    return jsonify({'url': audio_url}) if audio_url else jsonify({'error': 'Failed'}), 500
+    if not audio_url:
+        # Explicit 500 only when we truly failed to resolve a stream URL
+        return jsonify({'error': 'Failed to resolve audio stream'}), 500
+
+    # Normal success path – HTTP 200 with the audio stream URL
+    return jsonify({'url': audio_url})
 
 @app.route('/api/files')
 def list_files():
