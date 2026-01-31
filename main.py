@@ -152,9 +152,52 @@ def search():
 def play():
     video_url = request.args.get('url')
     if not video_url:
+        print("/api/play: missing url parameter", flush=True)
         return jsonify({'error': 'No URL provided'}), 400
+
+    print("/api/play: resolving", video_url, flush=True)
     audio_url = get_audio_url(video_url)
-    return jsonify({'url': audio_url}) if audio_url else jsonify({'error': 'Failed'}), 500
+    print("/api/play: resolved audio_url:", audio_url, flush=True)
+
+    if audio_url:
+        return jsonify({'url': audio_url})
+    else:
+        return jsonify({'error': 'Failed to resolve audio URL'}), 500
+
+</newCode>)
+def index():
+    return app.send_static_file('index.html')
+
+@app.route('/api/search')
+def search():
+    query = request.args.get('q')
+    return jsonify(search_youtube(query)) if que</old_code><new_code>@app.route('/api/play')
+def play():
+    video_url = request.args.get('url')
+    if not video_url:
+        print("/api/play: missing url parameter", flush=True)
+        return jsonify({'error': 'No URL provided'}), 400
+
+    print("/api/play: resolving", video_url, flush=True)
+    audio_url = get_audio_url(video_url)
+    print("/api/play: resolved audio_url:", audio_url, flush=True)
+
+    if audio_url:
+        return jsonify({'url': audio_url})
+    else:
+        return jsonify({'error': 'Failed to resolve audio URL'}), 500lay')
+def play():
+    video_url = request.args.get('url')
+    if not video_url:
+        print("/api/play: missing url parameter", flush=True)
+        return jsonify({'error': 'No URL provided'}), 400
+
+    print("/api/play: resolving", video_url, flush=True)
+    audio_url = get_audio_url(video_url)
+    print("/api/play: resolved audio_url:", audio_url, flush=True)
+
+    if audio_url:
+        return jsonify({'00
 
 @app.route('/api/files')
 def list_files():
