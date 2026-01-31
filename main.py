@@ -77,17 +77,51 @@ def search_youtube(query):
             return []
 
 def get_audio_url(video_url):
+    """Return a direct audio URL for the given YouTube video.
+
+    Tries the Python yt_dlp library first, then (optionally) falls back to a
+    local yt-dlp / yt-dlp.exe binary if available. This is useful on systems
+    where the Python package is broken but a working executable exists.
+    """
+    # First try the Python library
     ydl_opts = {
-        'format': 'bestaudio/best',
+        # Prefer m4a when available, then bestaudio
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'quiet': True,
+        'noplaylist': True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        try:
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
-            return info.get('url')
-        except Exception as e:
-            print(e)
+            direct_url = info.get('url')
+            if direct_url:
+                return direct_url
+    except Exception as e:
+        print("Python yt_dlp failed:", e)
+
+    # Fallback: try external yt-dlp / yt-dlp.exe if present
+    try:
+        import shutil, subprocess
+        ytdlp_path = shutil.which('yt-dlp') or shutil.which('yt-dlp.exe')
+        if not ytdlp_path:
+            print('yt-dlp executable not found on PATH')
             return None
+
+        # -g / --get-url prints the direct media URL to stdout
+        result = subprocess.run(
+            [ytdlp_path, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g', video_url],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        output = (result.stdout or '').strip().splitlines()
+        if output:
+            return output[0].strip() or None
+        print('yt-dlp executable returned no URLs')
+        return None
+    except Exception as e:
+        print('yt-dlp executable fallback failed:', e)
+        return None
 
 @app.route('/')
 def index():
