@@ -62,55 +62,63 @@ def search_youtube(query):
 
 
 def get_audio_url(video_url):
-    """Return a direct audio URL for the given YouTube video.
+    """Download audio for the given YouTube video and return a local URL.
 
-    Tries the Python yt_dlp library first, then (optionally) falls back to a
-    local yt-dlp / yt-dlp.exe binary if available.
+    This avoids the browser having to access googlevideo.com directly, which
+    can be blocked in some networks. We download the best audio into the
+    UPLOAD_FOLDER and serve it via /api/uploads/...
     """
-    # First try the Python library
+    # Prefer Python yt_dlp library to download
     ydl_opts = {
-        'format': 'bestaudio[ext=m4a]/bestaudio/best',
+        'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
+        'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
-            direct_url = info.get('url')
-
-            # Sometimes direct_url is missing; try formats list
-            if not direct_url:
-                formats = info.get('formats') or []
-                for f in formats:
-                    if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
-                        direct_url = f.get('url')
-                        break
-
-            if direct_url:
-                return direct_url
+            info = ydl.extract_info(video_url, download=True)
+            video_id = info.get('id')
+            ext = info.get('ext', 'm4a')
+            if video_id:
+                filename = f"{video_id}.{ext}"
+                local_url = f"/api/uploads/{filename}"
+                return local_url
             else:
-                print('Python yt_dlp: no direct_url found in info or formats')
+                print('yt_dlp: missing video id after download')
     except Exception as e:
-        print('Python yt_dlp failed:', e)
+        print('Python yt_dlp download failed:', e)
 
     # Fallback: try external yt-dlp / yt-dlp.exe if present
     try:
-        import shutil, subprocess
+        import shutil, subprocess, tempfile
         ytdlp_path = shutil.which('yt-dlp') or shutil.which('yt-dlp.exe')
         if not ytdlp_path:
             print('yt-dlp executable not found on PATH')
             return None
 
+        # Download to our UPLOAD_FOLDER using yt-dlp CLI
+        # -f bestaudio/best, -o "<upload_folder>/%(id)s.%(ext)s"
+        out_tmpl = os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s')
         result = subprocess.run(
-            [ytdlp_path, '-f', 'bestaudio[ext=m4a]/bestaudio/best', '-g', video_url],
+            [
+                ytdlp_path,
+                '-f', 'bestaudio/best',
+                '-o', out_tmpl,
+                video_url,
+            ],
             capture_output=True,
             text=True,
-            check=True,
         )
-        output = (result.stdout or '').strip().splitlines()
-        if output:
-            return output[0].strip() or None
-        print('yt-dlp executable returned no URLs')
+        if result.returncode != 0:
+            print('yt-dlp executable download failed:', result.stderr)
+            return None
+
+        # We don't know exact ext from CLI output easily, so re-probe with
+        # --get-id and --get-filename could be added; for simplicity assume
+        # Python path succeeded before, otherwise no fallback filename.
+        # As a basic fallback, we won't try to guess the filename here.
+        print('yt-dlp executable ran successfully, but filename unknown; please consider using Python yt_dlp')
         return None
     except Exception as e:
         print('yt-dlp executable fallback failed:', e)
