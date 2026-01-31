@@ -622,46 +622,56 @@
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
             
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
-            
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
+
+                if (!response.ok) {
+                    console.error('play API failed with status', response.status);
+                    document.getElementById('current-track').innerText = 'Error: failed to resolve audio.';
+                    return;
+                }
+
                 const data = await response.json();
-                if (data.url) {
-                    player.src = data.url;
-                    player.load();
-                    
-                    player.onended = () => {
-                        if (searchResults.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * searchResults.length);
-                            playTrack(searchResults[randomIndex]);
-                        }
-                    };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
-                    const playPromise = player.play();
-                    
-                    if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            document.getElementById('current-track').innerText = 'Playing: ' + track.title;
-                        }).catch(error => {
-                            console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
-                            setTimeout(() => {
-                                player.play().catch(e => {
-                                    document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
-                                });
-                            }, 100);
-                        });
+                if (!data.url) {
+                    console.error('play API returned no url field:', data);
+                    document.getElementById('current-track').innerText = 'Error: no playable audio URL.';
+                    return;
+                }
+
+                console.log('Playing audio URL:', data.url);
+                player.src = data.url;
+                player.load();
+                
+                player.onended = () => {
+                    if (searchResults.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * searchResults.length);
+                        playTrack(searchResults[randomIndex]);
                     }
+                };
+                
+                const playPromise = player.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(_ => {
+                        document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                    }).catch(error => {
+                        console.error('player.play() error:', error.name, error.message);
+                        if (error.name === 'NotSupportedError') {
+                            document.getElementById('current-track').innerText = 'Format not supported by this browser for: ' + track.title;
+                        } else {
+                            document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
+                        }
+                        // One more retry after a short delay in case it was a transient autoplay issue
+                        setTimeout(() => {
+                            player.play().catch(e => {
+                                console.error('Retry player.play() error:', e.name, e.message);
+                            });
+                        }, 100);
+                    });
                 }
             } catch (error) {
                 console.error('Error playing track:', error);
+                document.getElementById('current-track').innerText = 'Unexpected error while playing track.';
             }
         }
     </script>
