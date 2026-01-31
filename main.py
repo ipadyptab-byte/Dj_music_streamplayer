@@ -104,7 +104,6 @@ def get_audio_url(video_url):
                     # Prefer pure-audio formats with a valid direct URL
                     if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
                         audio_best = f
-                        # some basic preference for m4a / higher abr
                         break
                 if audio_best:
                     direct_url = audio_best.get('url')
@@ -114,22 +113,7 @@ def get_audio_url(video_url):
             else:
                 print('Python yt_dlp: no direct_url found in info or formats')
     except Exception as e:
-        print("Python yt_dlp failed:", e)ith yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
-            direct_url = info.get('url')
-
-            # Newer YouTube responses (esp. with SABR) sometimes do not fill
-            # info['url'], but provide URLs in the formats list only.
-            if not direct_url:
-                formats = info.get('formats') or []
-                audio_best = None
-                for f in formats:
-                    # Prefer pure-audio formats with a valid direct URL
-                    if f.get('vcodec') == 'none' and f.get('acodec') != 'none' and f.get('url'):
-                        audio_best = f
-                        # some basic preference for m4a / higher abr
-                        break
-                if audio_best)
+        print("Python yt_dlp failed:", e)
 
     # Fallback: try external yt-dlp / yt-dlp.exe if present
     try:
