@@ -60,60 +60,56 @@ def search_youtube(query):
             print("search_youtube error:", e)
             return []
 def get_audio_url(video_url):
-    """Resolve a direct audio stream URL for the given YouTube video.
+    """Download audio to a local file and return a local /api/uploads URL.
 
-    We ask yt_dlp for the available formats (without downloading) and
-    return a browser-playable audio URL, preferring m4a/AAC where
-    possible to avoid unsupported WebM/Opus issues in some browsers.
+    This avoids the browser having to talk to googlevideo.com directly,
+    which in your environment is returning 403. We let yt_dlp pick a
+    good audio format (preferring m4a/mp4 when available) and store it
+    under uploads/<id>.<ext>.
     """
+    # Prefer m4a/mp4 audio when possible, then fall back to bestaudio.
     ydl_opts = {
+        'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio[acodec^=mp4a]/bestaudio',
         'quiet': True,
         'noplaylist': True,
+        'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
+            info = ydl.extract_info(video_url, download=True)
     except Exception as e:
-        print('yt_dlp extract_info failed:', e, flush=True)
+        print('yt_dlp download failed:', e, flush=True)
         return None
 
-    # info for a single video may be nested under "entries"
-    if info is None:
-        print('yt_dlp returned no info', flush=True)
-        return None
-    if 'entries' in info and info['entries']:
-        info = info['entries'][0]
-
-    formats = info.get('formats') or []
-    if not formats:
-        print('No formats found in yt_dlp info', flush=True)
+    if not info:
+        print('yt_dlp returned no info after download', flush=True)
         return None
 
-    # Prefer audio-only formats in common browser-friendly containers.
-    preferred_exts = ['m4a', 'mp4', 'mp3', 'aac', 'ogg']
+    video_id = info.get('id')
+    ext = info.get('ext') or 'm4a'
+    if not video_id:
+        print('yt_dlp: missing video id after download', flush=True)
+        return None
 
-    def is_audio_only(f):
-        return f.get('vcodec') in (None, 'none') and f.get('acodec') not in (None, 'none')
+    filename = f"{video_id}.{ext}"
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
 
-    audio_only = [f for f in formats if is_audio_only(f)]
+    if not os.path.exists(file_path):
+        # In some cases yt_dlp may change ext; try to locate any file
+        # starting with the video id in UPLOAD_FOLDER.
+        for f in os.listdir(UPLOAD_FOLDER):
+            if f.startswith(video_id + '.'):
+                filename = f
+                file_path = os.path.join(UPLOAD_FOLDER, filename)
+                break
 
-    # Try to pick the best audio-only format with a preferred extension.
-    for ext in preferred_exts:
-        candidates = [f for f in audio_only if f.get('ext') == ext and f.get('url')]
-        if candidates:
-            # Let yt_dlp's sorting decide quality; pick the last (usually best)
-            chosen = candidates[-1]
-            print('Selected audio format:', chosen.get('format_id'), chosen.get('ext'), flush=True)
-            return chosen.get('url')
+    if os.path.exists(file_path):
+        local_url = f"/api/uploads/{filename}"
+        print('Serving local audio file:', local_url, flush=True)
+        return local_url
 
-    # Fallback: any audio-only format with a URL.
-    for f in audio_only:
-        if f.get('url'):
-            print('Fallback audio format:', f.get('format_id'), f.get('ext'), flush=True)
-            return f.get('url')
-
-    print('No usable audio URL found in formats list', flush=True)
+    print('Downloaded file not found in uploads folder for id', video_id, flush=True)
     return None
 # ===============================
 # Routes
