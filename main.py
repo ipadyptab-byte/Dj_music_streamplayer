@@ -60,64 +60,61 @@ def search_youtube(query):
             print("search_youtube error:", e)
             return []
 def get_audio_url(video_url):
-    """Download audio for the given YouTube video and return a local URL.
+    """Resolve a direct audio stream URL for the given YouTube video.
 
-    This avoids the browser having to access googlevideo.com directly, which
-    can be blocked in some networks. We download the best audio into the
-    UPLOAD_FOLDER and serve it via /api/uploads/...
+    We ask yt_dlp for the available formats (without downloading) and
+    return a browser-playable audio URL, preferring m4a/AAC where
+    possible to avoid unsupported WebM/Opus issues in some browsers.
     """
-    # Prefer Python yt_dlp library to download
     ydl_opts = {
-        'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
-        'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
     }
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_id = info.get('id')
-            ext = info.get('ext', 'm4a')
-            if video_id:
-                filename = f"{video_id}.{ext}"
-                local_url = f"/api/uploads/{filename}"
-                return local_url
-            else:
-                print('yt_dlp: missing video id after download')
+            info = ydl.extract_info(video_url, download=False)
     except Exception as e:
-        print('Python yt_dlp download failed:', e)
-
-    # Fallback: try external yt-dlp / yt-dlp.exe if present
-    try:
-        import shutil, subprocess
-        ytdlp_path = shutil.which('yt-dlp') or shutil.which('yt-dlp.exe')
-        if not ytdlp_path:
-            print('yt-dlp executable not found on PATH')
-            return None
-
-        # Download to our UPLOAD_FOLDER using yt-dlp CLI
-        out_tmpl = os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s')
-        result = subprocess.run(
-            [
-                ytdlp_path,
-                '-f', 'bestaudio/best',
-                '-o', out_tmpl,
-                video_url,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            print('yt-dlp executable download failed:', result.stderr)
-            return None
-
-        # At this point yt-dlp CLI has downloaded the file to UPLOAD_FOLDER,
-        # but we don't know the exact name without extra probing.
-        print('yt-dlp CLI download completed, but filename not resolved in code.')
+        print('yt_dlp extract_info failed:', e, flush=True)
         return None
-    except Exception as e:
-        print('yt-dlp executable fallback failed:', e)
+
+    # info for a single video may be nested under "entries"
+    if info is None:
+        print('yt_dlp returned no info', flush=True)
         return None
+    if 'entries' in info and info['entries']:
+        info = info['entries'][0]
+
+    formats = info.get('formats') or []
+    if not formats:
+        print('No formats found in yt_dlp info', flush=True)
+        return None
+
+    # Prefer audio-only formats in common browser-friendly containers.
+    preferred_exts = ['m4a', 'mp4', 'mp3', 'aac', 'ogg']
+
+    def is_audio_only(f):
+        return f.get('vcodec') in (None, 'none') and f.get('acodec') not in (None, 'none')
+
+    audio_only = [f for f in formats if is_audio_only(f)]
+
+    # Try to pick the best audio-only format with a preferred extension.
+    for ext in preferred_exts:
+        candidates = [f for f in audio_only if f.get('ext') == ext and f.get('url')]
+        if candidates:
+            # Let yt_dlp's sorting decide quality; pick the last (usually best)
+            chosen = candidates[-1]
+            print('Selected audio format:', chosen.get('format_id'), chosen.get('ext'), flush=True)
+            return chosen.get('url')
+
+    # Fallback: any audio-only format with a URL.
+    for f in audio_only:
+        if f.get('url'):
+            print('Fallback audio format:', f.get('format_id'), f.get('ext'), flush=True)
+            return f.get('url')
+
+    print('No usable audio URL found in formats list', flush=True)
+    return None
 # ===============================
 # Routes
 # ===============================
