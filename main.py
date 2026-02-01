@@ -33,13 +33,36 @@ def open_browser():
 # Helper functions
 # ===============================
 def search_media(source, query):
-    """Search tracks on different platforms via yt_dlp.
+    """Search tracks on different platforms.
 
-    Currently supports:
-    - youtube: ytsearch
-    - soundcloud: scsearch
+    Currently supports full search via yt_dlp for:
+    - youtube
+    - soundcloud
+
+    For other sources (spotify, jiosaavn, raaga) this returns a single
+    placeholder result that opens the platform's own search page in a
+    new tab on the front-end.
     """
     source = (source or 'youtube').lower()
+
+    # Placeholder handling for platforms where we don't have an API
+    if source in {'spotify', 'jiosaavn', 'raaga'}:
+        if source == 'spotify':
+            url = f"https://open.spotify.com/search/{query}"
+        elif source == 'jiosaavn':
+            url = f"https://www.jiosaavn.com/search/{query}"
+        else:  # raaga
+            url = f"https://www.raaga.com/search/{query}"
+
+        return [{
+            'id': None,
+            'title': f"Search '{query}' on {source.capitalize()}",
+            'thumbnail': None,
+            'url': url,
+            'source': source,
+        }]
+
+    # yt_dlp-backed search for YouTube and SoundCloud
     if source == 'soundcloud':
         search_expr = f"scsearch20:{query}"
     else:

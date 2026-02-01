@@ -6,8 +6,9 @@
     <title>Music Player</title>
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .search-container { margin-bottom: 20px; width: 100%; max-width: 500px; display: flex; }
+        .search-container { margin-bottom: 20px; width: 100%; max-width: 700px; display: flex; }
         input { flex: 1; padding: 10px; border-radius: 5px 0 0 5px; border: none; }
+        select { padding: 10px; border: none; background: #282828; color: white; }
         button { padding: 10px 20px; border-radius: 0 5px 5px 0; border: none; background: #1db954; color: white; cursor: pointer; }
         .results { width: 100%; max-width: 600px; }
         .track { display: flex; align-items: center; padding: 10px; border-bottom: 1px solid #333; cursor: pointer; transition: background 0.2s; }
@@ -23,9 +24,12 @@
     <h1>Music Search</h1>
     <div class="search-container">
         <input type="text" id="query" placeholder="Search for music...">
-        <select id="source" style="padding: 10px; border: none; background: #282828; color: white;">
+        <select id="source">
             <option value="youtube">YouTube</option>
             <option value="soundcloud">SoundCloud</option>
+            <option value="spotify">Spotify (opens web player)</option>
+            <option value="jiosaavn">JioSaavn (opens web player)</option>
+            <option value="raaga">Raaga (opens web player)</option>
         </select>
         <button onclick="search()">Search</button>
     </div>
