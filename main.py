@@ -60,7 +60,7 @@ def search_media(source, query):
             'source': source,
         }]
 
-    # JioSaavn: use public/unofficial search API to get real songs
+    # JioSaavn: use public/unofficial search API to get songs, albums, playlists
     if source == 'jiosaavn':
         import requests
         try:
@@ -69,22 +69,52 @@ def search_media(source, query):
                 params={'query': query},
                 timeout=5,
             )
-            data = resp.json()
-            songs = (data.get('data') or {}).get('songs') or {}
+            data = resp.json().get('data') or {}
             results = []
-            for item in songs.get('results', [])[:20]:
-                images = item.get('image') or []
-                thumb = None
-                if images:
-                    # pick the highest-quality image
-                    thumb = images[-1].get('url')
+
+            # Helper to extract a thumbnail from the JioSaavn image list
+            def _pick_thumb(images):
+                images = images or []
+                if not images:
+                    return None
+                return images[-1].get('url')
+
+            # Songs
+            songs = (data.get('songs') or {}).get('results', [])
+            for item in songs[:20]:
                 results.append({
                     'id': item.get('id'),
                     'title': item.get('title'),
-                    'thumbnail': thumb,
+                    'thumbnail': _pick_thumb(item.get('image')),
                     'url': item.get('url'),  # JioSaavn song page
                     'source': 'jiosaavn',
+                    'kind': 'song',
                 })
+
+            # Albums
+            albums = (data.get('albums') or {}).get('results', [])
+            for item in albums[:10]:
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': _pick_thumb(item.get('image')),
+                    'url': item.get('url'),  # album page
+                    'source': 'jiosaavn',
+                    'kind': 'album',
+                })
+
+            # Playlists
+            playlists = (data.get('playlists') or {}).get('results', [])
+            for item in playlists[:10]:
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': _pick_thumb(item.get('image')),
+                    'url': item.get('url'),  # playlist page
+                    'source': 'jiosaavn',
+                    'kind': 'playlist',
+                })
+
             return results
         except Exception as e:
             print('JioSaavn search error:', e)
@@ -120,12 +150,23 @@ def search_media(source, query):
                         video_id = entry.get('id')
                         if video_id:
                             thumbnail = f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
+
+                    # Try to classify type for SoundCloud: track vs playlist
+                    kind = None
+                    ie_key = entry.get('ie_key') or entry.get('extractor_key')
+                    if source == 'soundcloud' and ie_key:
+                        if 'Playlist' in ie_key:
+                            kind = 'playlist'
+                        else:
+                            kind = 'track'
+
                     results.append({
                         'id': entry.get('id'),
                         'title': title,
                         'thumbnail': thumbnail,
                         'url': url,
                         'source': source,
+                        'kind': kind,
                     })
             return results
         except Exception as e:
