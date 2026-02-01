@@ -67,8 +67,10 @@ def get_audio_url(video_url):
     UPLOAD_FOLDER and serve it via /api/uploads/...
     """
     # Prefer Python yt_dlp library to download
+    # Prefer container/codec combinations widely supported by HTML5 audio.
+    # This asks yt_dlp for m4a or mp3 when possible, then falls back.
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best',
         'quiet': True,
         'noplaylist': True,
         'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
