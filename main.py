@@ -32,7 +32,101 @@ def open_browser():
 # ===============================
 # Helper functions
 # ===============================
-def search_youtube(query):
+def search_media(source, query):
+    """Search tracks on different platforms.
+
+    Currently supports full search via yt_dlp for:
+    - youtube
+    - soundcloud
+
+    For other sources (spotify, jiosaavn, raaga) this returns a single
+    placeholder result that opens the platform's own search page in a
+    new tab on the front-end.
+    """
+    source = (source or 'youtube').lower()
+
+    # Placeholder handling for platforms where we don't have a proper API
+    if source in {'spotify', 'raaga'}:
+        if source == 'spotify':
+            url = f"https://open.spotify.com/search/{query}"
+        else:  # raaga
+            url = f"https://www.raaga.com/search/{query}"
+
+        return [{
+            'id': None,
+            'title': f"Search '{query}' on {source.capitalize()}",
+            'thumbnail': None,
+            'url': url,
+            'source': source,
+        }]
+
+    # JioSaavn: use public/unofficial search API to get songs, albums, playlists
+    if source == 'jiosaavn':
+        import requests
+        try:
+            resp = requests.get(
+                'https://saavn.sumit.co/api/search',
+                params={'query': query},
+                timeout=5,
+            )
+            data = resp.json().get('data') or {}
+            results = []
+
+            # Helper to extract a thumbnail from the JioSaavn image list
+            def _pick_thumb(images):
+                images = images or []
+                if not images:
+                    return None
+                return images[-1].get('url')
+
+            # Songs
+            songs = (data.get('songs') or {}).get('results', [])
+            for item in songs[:20]:
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': _pick_thumb(item.get('image')),
+                    'url': item.get('url'),  # JioSaavn song page
+                    'source': 'jiosaavn',
+                    'kind': 'song',
+                })
+
+            # Albums
+            albums = (data.get('albums') or {}).get('results', [])
+            for item in albums[:10]:
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': _pick_thumb(item.get('image')),
+                    'url': item.get('url'),  # album page
+                    'source': 'jiosaavn',
+                    'kind': 'album',
+                })
+
+            # Playlists
+            playlists = (data.get('playlists') or {}).get('results', [])
+            for item in playlists[:10]:
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': _pick_thumb(item.get('image')),
+                    'url': item.get('url'),  # playlist page
+                    'source': 'jiosaavn',
+                    'kind': 'playlist',
+                })
+
+            return results
+        except Exception as e:
+            print('JioSaavn search error:', e)
+            return []
+
+    # yt_dlp-backed search ONLY for SoundCloud
+    if source == 'soundcloud':
+        search_expr = f"scsearch20:{query}"
+    else:
+        # No YouTube search anymore; for any other source, return empty
+        return []
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
@@ -42,22 +136,37 @@ def search_youtube(query):
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
+            search_results = ydl.extract_info(search_expr, download=False)
             results = []
             if search_results and 'entries' in search_results:
                 for entry in search_results['entries']:
                     if not entry:
                         continue
-                    video_id = entry.get('id')
+                    url = entry.get('url') or entry.get('webpage_url')
+                    # Fallbacks for different extractors
+                    title = entry.get('title') or entry.get('fulltitle') or 'Unknown title'
+                    thumbnail = entry.get('thumbnail')
+
+                    # Classify type for SoundCloud: track vs playlist when possible
+                    kind = None
+                    ie_key = entry.get('ie_key') or entry.get('extractor_key')
+                    if ie_key:
+                        if 'Playlist' in ie_key:
+                            kind = 'playlist'
+                        else:
+                            kind = 'track'
+
                     results.append({
-                        'id': video_id,
-                        'title': entry.get('title'),
-                        'thumbnail': f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg",
-                        'url': f"https://www.youtube.com/watch?v={video_id}"
+                        'id': entry.get('id'),
+                        'title': title,
+                        'thumbnail': thumbnail,
+                        'url': url,
+                        'source': 'soundcloud',
+                        'kind': kind,
                     })
             return results
         except Exception as e:
-            print("search_youtube error:", e)
+            print("search_media error:", e)
             return []
 def get_audio_url(video_url):
     """Download audio for the given YouTube video and return a local URL.
@@ -67,8 +176,10 @@ def get_audio_url(video_url):
     UPLOAD_FOLDER and serve it via /api/uploads/...
     """
     # Prefer Python yt_dlp library to download
+    # Prefer container/codec combinations widely supported by HTML5 audio.
+    # This asks yt_dlp for m4a or mp3 when possible, then falls back.
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best',
         'quiet': True,
         'noplaylist': True,
         'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
@@ -118,16 +229,20 @@ def get_audio_url(video_url):
     except Exception as e:
         print('yt-dlp executable fallback failed:', e)
         return None
+
 # ===============================
 # Routes
 # ===============================
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
+
 @app.route('/api/search')
 def search():
     query = request.args.get('q')
-    return jsonify(search_youtube(query)) if query else jsonify([])
+    source = request.args.get('source', 'jiosaavn')
+    return jsonify(search_media(source, query)) if query else jsonify([])
+
 @app.route('/api/play')
 def play():
     video_url = request.args.get('url')
@@ -143,6 +258,7 @@ def play():
         return jsonify({'url': audio_url})
     else:
         return jsonify({'error': 'Failed to resolve audio URL'}), 500
+
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
     if 'file' not in request.files:
@@ -154,13 +270,16 @@ def api_upload_file():
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(save_path)
     return jsonify({'url': f'/api/uploads/{filename}', 'title': filename})
+
 @app.route('/api/uploads/<filename>')
 def api_uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
 @app.route('/api/files')
 def list_files():
     files = os.listdir(app.config['UPLOAD_FOLDER'])
     return jsonify([{'title': f, 'url': f'/api/uploads/{f}'} for f in files])
+
 @app.route('/api/delete', methods=['POST'])
 def delete_file():
     filename = secure_filename(request.json.get('filename', ''))
@@ -169,6 +288,7 @@ def delete_file():
         os.remove(file_path)
         return jsonify({'success': True})
     return jsonify({'error': 'File not found'}), 404
+
 # ===============================
 # App start
 # ===============================
