@@ -23,6 +23,10 @@
     <h1>Music Search</h1>
     <div class="search-container">
         <input type="text" id="query" placeholder="Search for music...">
+        <select id="source" style="padding: 10px; border: none; background: #282828; color: white;">
+            <option value="youtube">YouTube</option>
+            <option value="soundcloud">SoundCloud</option>
+        </select>
         <button onclick="search()">Search</button>
     </div>
 
@@ -591,12 +595,13 @@
 
         async function search() {
             const query = document.getElementById('query').value;
+            const source = document.getElementById('source').value;
             if (!query) return;
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = 'Searching...';
             
             try {
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${encodeURIComponent(source)}`);
                 const results = await response.json();
                 searchResults = results; // Store results for autoplay
                 resultsDiv.innerHTML = '';
@@ -619,12 +624,14 @@
         }
 
         async function playTrack(track) {
+            // For non-YouTube/SoundCloud sources, open the official URL in a new tab
+            if (track.source && track.source !== 'youtube' && track.source !== 'soundcloud') {
+                window.open(track.url, '_blank');
+                return;
+            }
+
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
             
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
@@ -640,10 +647,6 @@
                         }
                     };
                     
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
                     const playPromise = player.play();
                     
                     if (playPromise !== undefined) {
@@ -651,7 +654,6 @@
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
                                 player.play().catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
