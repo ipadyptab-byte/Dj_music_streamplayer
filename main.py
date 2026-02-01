@@ -244,7 +244,7 @@ def index():
 @app.route('/api/search')
 def search():
     query = request.args.get('q')
-    source = request.args.get('source', 'youtube')
+    source = request.args.get('source', 'jiosaavn')
     return jsonify(search_media(source, query)) if query else jsonify([])
 
 @app.route('/api/play')
