@@ -120,12 +120,12 @@ def search_media(source, query):
             print('JioSaavn search error:', e)
             return []
 
-    # yt_dlp-backed search for YouTube and SoundCloud
+    # yt_dlp-backed search ONLY for SoundCloud
     if source == 'soundcloud':
         search_expr = f"scsearch20:{query}"
     else:
-        # default to YouTube search
-        search_expr = f"ytsearch20:{query}"
+        # No YouTube search anymore; for any other source, return empty
+        return []
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -146,15 +146,11 @@ def search_media(source, query):
                     # Fallbacks for different extractors
                     title = entry.get('title') or entry.get('fulltitle') or 'Unknown title'
                     thumbnail = entry.get('thumbnail')
-                    if not thumbnail and source == 'youtube':
-                        video_id = entry.get('id')
-                        if video_id:
-                            thumbnail = f"https://img.youtube.com/vi/{video_id}/mqdefault.jpg"
 
-                    # Try to classify type for SoundCloud: track vs playlist
+                    # Classify type for SoundCloud: track vs playlist when possible
                     kind = None
                     ie_key = entry.get('ie_key') or entry.get('extractor_key')
-                    if source == 'soundcloud' and ie_key:
+                    if ie_key:
                         if 'Playlist' in ie_key:
                             kind = 'playlist'
                         else:
@@ -165,7 +161,7 @@ def search_media(source, query):
                         'title': title,
                         'thumbnail': thumbnail,
                         'url': url,
-                        'source': source,
+                        'source': 'soundcloud',
                         'kind': kind,
                     })
             return results
