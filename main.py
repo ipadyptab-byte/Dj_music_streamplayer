@@ -45,12 +45,10 @@ def search_media(source, query):
     """
     source = (source or 'youtube').lower()
 
-    # Placeholder handling for platforms where we don't have an API
-    if source in {'spotify', 'jiosaavn', 'raaga'}:
+    # Placeholder handling for platforms where we don't have a proper API
+    if source in {'spotify', 'raaga'}:
         if source == 'spotify':
             url = f"https://open.spotify.com/search/{query}"
-        elif source == 'jiosaavn':
-            url = f"https://www.jiosaavn.com/search/{query}"
         else:  # raaga
             url = f"https://www.raaga.com/search/{query}"
 
@@ -61,6 +59,36 @@ def search_media(source, query):
             'url': url,
             'source': source,
         }]
+
+    # JioSaavn: use public/unofficial search API to get real songs
+    if source == 'jiosaavn':
+        import requests
+        try:
+            resp = requests.get(
+                'https://saavn.sumit.co/api/search',
+                params={'query': query},
+                timeout=5,
+            )
+            data = resp.json()
+            songs = (data.get('data') or {}).get('songs') or {}
+            results = []
+            for item in songs.get('results', [])[:20]:
+                images = item.get('image') or []
+                thumb = None
+                if images:
+                    # pick the highest-quality image
+                    thumb = images[-1].get('url')
+                results.append({
+                    'id': item.get('id'),
+                    'title': item.get('title'),
+                    'thumbnail': thumb,
+                    'url': item.get('url'),  # JioSaavn song page
+                    'source': 'jiosaavn',
+                })
+            return results
+        except Exception as e:
+            print('JioSaavn search error:', e)
+            return []
 
     # yt_dlp-backed search for YouTube and SoundCloud
     if source == 'soundcloud':
