@@ -7,11 +7,12 @@ import signal
 import platform
 from datetime import datetime
 import random
+import json
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+from main import UPLOAD_FOLDER, search_youtube, get_audio_url, BASE_DIR
 
 
 # ---------------------------
@@ -187,6 +188,10 @@ class SchedulerState:
         # Map time string -> last date run ("YYYY-MM-DD")
         self.prayer_last_run: dict[str, str] = {}
 
+        # Where we persist scheduler configuration between runs
+        self._config_dir = os.path.join(BASE_DIR, "config")
+        self._state_path = os.path.join(self._config_dir, "scheduler_state.json")
+
         # Controls the main user-selected track so we can interrupt
         # it for higher-priority prayer and then resume.
         self.main_player = MainTrackPlayer()
@@ -196,6 +201,12 @@ class SchedulerState:
         # Index of the currently playing item in history (for auto-next)
         self.main_history_index: int | None = None
 
+        # Last Search & Play results and the index of the currently playing
+        # item within that result list. Used to auto-play the next track
+        # from the same search without asking the user again.
+        self.search_results: list[dict] = []
+        self.search_index: int | None = None
+
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
         self.in_prayer: bool = False
@@ -203,7 +214,45 @@ class SchedulerState:
         self.running = True
         self.lock = threading.Lock()
 
+        # Load any previously saved scheduler configuration
+        self._load_state()
+
     # Convenience helpers guarded by lock where needed
+
+    def _load_state(self) -> None:
+        os.makedirs(self._config_dir, exist_ok=True)
+        try:
+            with open(self._state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            return
+        except Exception:
+            # Ignore corrupt config and start fresh
+            return
+
+        with self.lock:
+            self.ad_file = data.get("ad_file") or None
+            self.ad_interval_sec = int(data.get("ad_interval_sec", self.ad_interval_sec))
+            self.prayer_file = data.get("prayer_file") or None
+            self.prayer_times = list(data.get("prayer_times", []))
+            self.prayer_last_run = dict(data.get("prayer_last_run", {}))
+
+    def save_state(self) -> None:
+        os.makedirs(self._config_dir, exist_ok=True)
+        with self.lock:
+            data = {
+                "ad_file": self.ad_file,
+                "ad_interval_sec": self.ad_interval_sec,
+                "prayer_file": self.prayer_file,
+                "prayer_times": list(self.prayer_times),
+                "prayer_last_run": dict(self.prayer_last_run),
+            }
+        try:
+            with open(self._state_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            # Don't crash the app if saving fails
+            pass
 
 
 # ---------------------------
@@ -320,6 +369,16 @@ class MainWindow:
         self.ad_label = tk.Label(ad_frame, text="No advertisement track selected")
         self.ad_label.pack(anchor="w")
 
+        # Reflect any previously saved scheduler configuration in the UI
+        with self.state.lock:
+            saved_ad_file = self.state.ad_file
+            saved_ad_interval = self.state.ad_interval_sec
+            saved_prayer_file = self.state.prayer_file
+            saved_prayer_times = list(self.state.prayer_times)
+
+        if saved_ad_file:
+            self.ad_label.config(text=f"Ad track: {os.path.basename(saved_ad_file)}")
+
         btn_ad_select = tk.Button(ad_frame, text="Select Advertisement Track", command=self.select_ad_track)
         btn_ad_select.pack(anchor="w", pady=5)
 
@@ -329,7 +388,7 @@ class MainWindow:
         interval_frame = tk.Frame(ad_frame)
         interval_frame.pack(anchor="w", pady=5)
         tk.Label(interval_frame, text="Play every").pack(side="left")
-        self.ad_interval_var = tk.StringVar(value="180")
+        self.ad_interval_var = tk.StringVar(value=str(saved_ad_interval))
         ad_entry = tk.Entry(interval_frame, width=6, textvariable=self.ad_interval_var)
         ad_entry.pack(side="left", padx=5)
         tk.Label(interval_frame, text="seconds").pack(side="left")
@@ -343,6 +402,9 @@ class MainWindow:
         self.prayer_label = tk.Label(prayer_frame, text="No prayer track selected")
         self.prayer_label.pack(anchor="w")
 
+        if saved_prayer_file:
+            self.prayer_label.config(text=f"Prayer track: {os.path.basename(saved_prayer_file)}")
+
         btn_prayer_select = tk.Button(prayer_frame, text="Select Prayer Track", command=self.select_prayer_track)
         btn_prayer_select.pack(anchor="w", pady=5)
 
@@ -354,6 +416,10 @@ class MainWindow:
 
         self.times_listbox = tk.Listbox(times_frame, height=5)
         self.times_listbox.pack(side="left", fill="x", expand=True)
+
+        # Restore any saved prayer times
+        for hm in saved_prayer_times:
+            self.times_listbox.insert("end", hm)
 
         btns_frame = tk.Frame(times_frame)
         btns_frame.pack(side="left", padx=5)
@@ -406,34 +472,35 @@ class MainWindow:
         seconds = int(elapsed) % 60
         self.main_time_label.config(text=f"Elapsed: {minutes:02d}:{seconds:02d}")
 
-        # If the previous status indicated a natural end, auto-play a random
-        # track from the history (if available).
+        # If the previous status indicated a natural end, auto-play the next
+        # track from the same Search & Play result list (if available).
         if finished:
-            self._play_random_from_history()
+            self._play_next_from_search_results()
 
         self.root.after(1000, self._update_main_track_ui)
 
-    def _play_random_from_history(self) -> None:
-        """Advance to the next track from Search & Play history.
+    def _play_next_from_search_results(self) -> None:
+        """Play the next track from the last Search & Play result list.
 
-        This simulates "picking a track via Search & Play automatically":
-        we move to the next item in the history list. When we reach the
-        end, we wrap around to the first track.
+        When a user picks a track from Search & Play, we remember the full
+        result list and the index of the chosen track. When that track ends
+        naturally, this method advances to the next item in that same list
+        (if any) and plays it automatically.
         """
         with self.state.lock:
-            if not self.state.main_history:
+            if not self.state.search_results:
                 return
-            # Advance index
-            if self.state.main_history_index is None:
-                self.state.main_history_index = 0
-            else:
-                self.state.main_history_index = (self.state.main_history_index + 1) % len(self.state.main_history)
-            path, title = self.state.main_history[self.state.main_history_index]
-            self.state.main_title = title
-        if not os.path.exists(path):
-            return
-        self.log(f"Auto-playing next main track from history: {title}")
-        threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
+            if self.state.search_index is None:
+                return
+            next_index = self.state.search_index + 1
+            if next_index >= len(self.state.search_results):
+                # Reached the end of this search result list.
+                return
+            track = self.state.search_results[next_index]
+            self.state.search_index = next_index
+        title = track.get("title", "(no title)")
+        self.log(f"Auto-playing next track from Search & Play results: {title}")
+        self.play_search_result(track)
 
     def log(self, msg: str) -> None:
         self.log_text.configure(state="normal")
@@ -553,6 +620,8 @@ class MainWindow:
         self.log("Removed selected prayer time(s)")
 
     def on_close(self) -> None:
+        # Persist current scheduler configuration
+        self.state.save_state()
         # Signal threads to stop and then destroy window
         self.state.running = False
         # Stop main track process explicitly
@@ -613,6 +682,11 @@ class MainWindow:
                 return
             index = sel[0]
             track = results[index]
+            # Remember this search result list and which item was chosen,
+            # so we can auto-play the next track when this one finishes.
+            with self.state.lock:
+                self.state.search_results = results
+                self.state.search_index = index
             dlg.destroy()
             self.play_search_result(track)
 
