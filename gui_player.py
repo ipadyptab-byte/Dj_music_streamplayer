@@ -35,6 +35,111 @@ def play_with_ffplay(path: str) -> None:
         )
 
 
+class FfplayManager:
+    """Coordinate ffplay processes so playback does not overlap.
+
+    Priority: main < ad < prayer.
+    - A higher-priority kind stops any current playback.
+    - A lower-priority kind will *not* interrupt a higher-priority one.
+    """
+
+    PRIORITY = {"main": 1, "ad": 2, "prayer": 3}
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._proc: subprocess.Popen | None = None
+        self._kind: str | None = None
+        self._path: str | None = None
+
+    def _can_preempt(self, new_kind: str) -> bool:
+        if self._kind is None:
+            return True
+        return self.PRIORITY.get(new_kind, 0) >= self.PRIORITY.get(self._kind, 0)
+
+    def _stop_locked(self) -> None:
+        if not self._proc:
+            return
+        try:
+            self._proc.terminate()
+        except Exception:
+            pass
+
+    def play(self, path: str, kind: str, logger=None, on_finished=None, on_preempt=None, start_at: float | None = None) -> None:
+        """Start playback in a background thread with priority rules.
+
+        kind is one of "main", "ad", "prayer".
+        on_finished(kind, path) is called when playback ends for this call.
+        on_preempt(prev_kind, prev_path) is called if this call stops a previous one.
+        start_at: optional start offset in seconds (used for resuming main).
+        """
+
+        def worker(proc: subprocess.Popen, finished_callback, started_kind: str) -> None:
+            try:
+                proc.wait()
+            finally:
+                finished_path: str | None = None
+                with self._lock:
+                    if self._proc is proc:
+                        finished_path = self._path
+                        self._proc = None
+                        self._kind = None
+                        self._path = None
+                if finished_callback is not None:
+                    finished_callback(started_kind, finished_path)
+
+        with self._lock:
+            if self._proc is not None and not self._can_preempt(kind):
+                if logger:
+                    logger(
+                        f"Ignoring {kind} playback because higher-priority {self._kind} is currently playing."
+                    )
+                return
+
+            if self._proc is not None and self._can_preempt(kind):
+                prev_kind = self._kind
+                prev_path = self._path
+                if on_preempt is not None:
+                    on_preempt(prev_kind, prev_path)
+                if logger:
+                    logger(f"Stopping current {self._kind} playback for new {kind} track.")
+                self._stop_locked()
+
+            try:
+                proc = subprocess.Popen(
+                    [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except FileNotFoundError:
+                if logger is not None:
+                    logger(
+                        "ffplay (from ffmpeg) is not installed or not on PATH. "
+                        "Please install ffmpeg and restart the application."
+                    )
+                else:
+                    messagebox.showerror(
+                        "ffplay not found",
+                        "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+                        "Please install ffmpeg and restart the application.",
+                    )
+                return
+
+            self._proc = proc
+            self._kind = kind
+            self._path = path
+
+        threading.Thread(
+            target=worker,
+            args=(proc, on_finished, kind),
+            daemon=True,
+        ).start()
+
+
 # ---------------------------
 # Scheduler state
 # ---------------------------
@@ -51,6 +156,9 @@ class SchedulerState:
         # Map time string -> last date run ("YYYY-MM-DD")
         self.prayer_last_run: dict[str, str] = {}
 
+        # Single shared ffplay manager for all playback kinds
+        self.player = FfplayManager()
+
         self.running = True
         self.lock = threading.Lock()
 
@@ -62,7 +170,17 @@ class SchedulerState:
 # ---------------------------
 
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Periodically play advertisement track at a fixed interval."""
+    """Periodically play advertisement track at a fixed interval.
+
+    Behaviour:
+    - The very first interval starts counting when the first main track starts
+      (ui.last_main_path becomes non-None).
+    - After an advertisement finishes, the next interval starts counting from
+      the end of that advertisement.
+    - This pattern continues across tracks.
+    """
+    started_after_main = False
+
     while state.running:
         time.sleep(1)
         with state.lock:
@@ -70,6 +188,13 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             interval = state.ad_interval_sec
         if not ad_file or interval <= 0:
             continue
+
+        # Wait until some main track has been played at least once
+        if not started_after_main:
+            if ui.last_main_path is None:
+                continue
+            started_after_main = True
+
         # Sleep in chunks to allow quick shutdown
         slept = 0
         while state.running and slept < interval:
@@ -77,9 +202,32 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             slept += 1
         if not state.running:
             break
+
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement: {os.path.basename(ad_file)}")
-            play_with_ffplay(ad_file)
+
+            done = threading.Event()
+
+            def on_preempt(prev_kind: str | None, prev_path: str | None) -> None:
+                if prev_kind == "main" and prev_path:
+                    ui.interrupted_main_path = prev_path
+
+            def on_finished(kind: str, _path: str | None) -> None:
+                if kind == "ad":
+                    ui.resume_main_if_any()
+                    done.set()
+
+            state.player.play(
+                ad_file,
+                kind="ad",
+                logger=ui.log,
+                on_finished=on_finished,
+                on_preempt=on_preempt,
+            )
+
+            # Wait until this advertisement finishes before starting the next interval
+            while state.running and not done.is_set():
+                time.sleep(0.5)
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
@@ -105,7 +253,22 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     # Update last_run under lock
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    play_with_ffplay(prayer_file)
+
+                    def on_preempt(prev_kind: str | None, prev_path: str | None) -> None:
+                        if prev_kind == "main" and prev_path:
+                            ui.interrupted_main_path = prev_path
+
+                    def on_finished(kind: str, _path: str | None) -> None:
+                        if kind == "prayer":
+                            ui.resume_main_if_any()
+
+                    state.player.play(
+                        prayer_file,
+                        kind="prayer",
+                        logger=ui.log,
+                        on_finished=on_finished,
+                        on_preempt=on_preempt,
+                    )
 
 
 # ---------------------------
@@ -117,6 +280,11 @@ class MainWindow:
         self.root = root
         self.state = state
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
+
+        # Track main playback and history for auto-continue
+        self.main_history: list[str] = []
+        self.last_main_path: str | None = None
+        self.interrupted_main_path: str | None = None
 
         # --- Search & play section ---
         search_frame = tk.LabelFrame(root, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
@@ -278,6 +446,52 @@ class MainWindow:
         self.state.running = False
         self.root.after(200, self.root.destroy)
 
+    def resume_main_if_any(self) -> None:
+        """Resume the last interrupted main track, if any, then continue auto-play.
+
+        Main is restarted from the beginning (ffplay cannot seek to the exact
+        previous position in this setup).
+        """
+        path = self.interrupted_main_path
+        if not path or not os.path.exists(path):
+            self.interrupted_main_path = None
+            return
+
+        self.interrupted_main_path = None
+        self.log("Resuming main track after interruption.")
+        self._play_main_with_autonext(path)
+
+    def _play_main_with_autonext(self, path: str) -> None:
+        """Play a main track and, when it finishes, queue a random main track.
+
+        All tracks that have ever been played as main are used as the pool
+        for random continuation.
+        """
+        self.last_main_path = path
+        if path not in self.main_history:
+            self.main_history.append(path)
+
+        def on_finished(kind: str, finished_path: str | None) -> None:
+            if kind != "main":
+                return
+            # After a main track ends, auto-play a random one from history.
+            import random
+
+            candidates = [p for p in self.main_history if os.path.exists(p)]
+            if not candidates:
+                return
+            next_path = random.choice(candidates)
+            # Avoid immediate repeat if there is more than one candidate.
+            if len(candidates) > 1 and finished_path and next_path == finished_path:
+                others = [p for p in candidates if p != finished_path]
+                if others:
+                    next_path = random.choice(others)
+
+            self.log("Main track finished, playing random track from history.")
+            self._play_main_with_autonext(next_path)
+
+        self.state.player.play(path, kind="main", logger=self.log, on_finished=on_finished)
+
     # ----- Search & play -----
 
     def search_and_play(self) -> None:
@@ -349,8 +563,8 @@ class MainWindow:
             return
 
         self.log(f"Playing search result: {title}")
-        # Run playback in a background thread so UI stays responsive
-        threading.Thread(target=play_with_ffplay, args=(path,), daemon=True).start()
+        # Use shared manager so playback obeys priority rules and auto-continue
+        self._play_main_with_autonext(path)
 
 
 # ---------------------------
