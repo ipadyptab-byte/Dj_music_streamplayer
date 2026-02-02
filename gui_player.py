@@ -1,38 +1,142 @@
-import os
-import threading
-import time
-import shutil
-import subprocess
-from datetime import datetime
-
-import tkinter as tk
-from tkinter import filedialog, messagebox
-
-from main import UPLOAD_FOLDER, search_youtube, get_audio_url
-
-
-# ---------------------------
+> ---------------------------
 # Low-level audio playback
 # ---------------------------
 
-def play_with_ffplay(path: str) -> None:
-    """Play an audio file using ffplay (part of ffmpeg).
+class PlaybackController:
+    """Controls a single ffplay process at a time with priorities.
 
-    This is blocking, so it must be run in a background thread.
+    Kinds: "main <s "ad <y "prayer". Starting a higher-priority kind
+    stops the lower-priority one. This approximates "pause" semantics.
     """
-    try:
-        subprocess.run([
-            "ffplay",
-            "-nodisp",
-            "-autoexit",
-            path,
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except FileNotFoundError:
-        messagebox.showerror(
-            "ffplay not found",
-            "ffplay (from ffmpeg) is not installed or not on PATH.\n"
-            "Please install ffmpeg and restart the application.",
-        )
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.proc: subprocess.Popen | None = None
+        self.kind: str | None = None
+
+    def _priority(self, kind: str) -> int:
+        order = {"main": 1, "ad": 2, "prayer": 3}
+        return order.get(kind, 0)
+
+    def play(self, path: str, kind: str) -> None:
+        with self.lock:
+            # If something is already playing, stop it if lower or equal priority
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+                self.proc = None
+                self.kind = None
+
+            try:
+                self.proc = subprocess.Popen(
+                    [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self.kind = kind
+            except FileNotFoundError:
+                messagebox.showerror(
+                    "ffplay not found",
+                    "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+                    "Please install ffmpeg and restart the application.",
+                )
+                self.proc = None
+                self.kind = None
+
+    def stop(self) -> None:
+        with self.lock:
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+            self.proc =t</old_code><new_code># ---------------------------
+# Low-level audio playback
+# ---------------------------
+
+class PlaybackController:
+    """Controls a single ffplay process at a time with priorities.
+
+    Kinds: "main" < "ad" < "prayer". Starting a higher-priority kind
+    stops the lower-priority one. This approximates "pause" semantics.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.proc: subprocess.Popen | None = None
+        self.kind: str | None = None
+
+    def _priority(self, kind: str) -> int:
+        order = {"main": 1, "ad": 2, "prayer": 3}
+        return order.get(kind, 0)
+
+    def play(self, path: str, kind: str) -> None:
+        with self.lock:
+            # If something is already playing, stop it if lower or equal priority
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+                self.proc = None
+                self.kind = None
+
+            try:
+                self.proc = subprocess.Popen(
+                    [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self.kind = kind
+            except FileNotFoundError:
+                messagebox.showerror(
+                    "ffplay not found",
+                    "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+                    "Please install ffmpeg and restart the application.",
+                )
+                self.proc = None
+                self.kind = None
+
+    def stop(self) -> None:
+        with self.lock:
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+            self.proc = None
+            self.kind = None
+
+
+PLAYBACK = PlaybackController()
+
+
+def play_with_ffplay(path: str, kind: str) -> None:
+    """Start playback of the given file as the given kind.
+
+    kind is one of: "main", "ad", "prayer".
+    """
+    PLAYBACK.play(path, kind) -> None:
+        with self.lock:
+            # If something is already playing, stop it if lower or equal priority
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+
 
 
 # ---------------------------
@@ -295,9 +399,108 @@ class MainWindow:
 
         if not results:
             messagebox.showinfo("Search", "No results found.")
-            return
+            return</old_code><new_code>import os
+import threading
+import time
+import shutil
+import subprocess
+from datetime import datetime
 
-        # Build a simple selection dialog
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
+from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+
+
+# ---------------------------
+# Low-level audio playback
+# ---------------------------
+
+class PlaybackController:
+    """Controls a single ffplay process at a time.
+
+    When a new playback starts, any existing ffplay process is terminated.
+    This effectively "pauses" whatever was playing before.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.proc: subprocess.Popen | None = None
+        self.kind: str | None = None
+
+    def play(self, path: str, kind: str) -> None:
+        with self.lock:
+            #outube, get_audio_url
+
+
+# ---------------------------
+# Low-level audio playback
+# ---------------------------
+
+class PlaybackController:
+    """Controls a single ffplay process at a time.
+
+    When a new playback starts, any existing ffplay process is terminated.
+    This effectively "pauses" whatever was playing before.
+    """
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.proc: subprocess.Popen | None = None
+        self.kind: str | None = None
+
+    def play(self, path: str, kind: str) -> None:
+        with self.lock:
+            # Stop anything that is already playing
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+                self.proc = None
+                self.kind = None
+
+            try:
+                self.proc = subprocess.Popen(
+                    [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self.kind = kind
+            except FileNotFoundError:
+                messagebox.showerror(
+                    "ffplay not found",
+                    "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+                    "Please install ffmpeg and restart the application.",
+                )
+                self.proc = None
+                self.kind = None
+
+    def stop(self) -> None:
+        with self.lock:
+            if self.proc is not None:
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+            self.proc = None
+            self.kind = None
+
+
+PLAYBACK = PlaybackController()
+
+
+def play_with_ffplay(path: str, kind: str) -> None:
+    """Start playback of the given file as the given kind.
+
+    kind is one of: "main", "ad", "prayer".
+    """
+    PLAYBACK.play(path, kind)le selection dialog
         dlg = tk.Toplevel(self.root)
         dlg.title("Select Track")
         dlg.geometry("500x300")
