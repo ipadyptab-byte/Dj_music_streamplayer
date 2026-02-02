@@ -169,7 +169,17 @@ class SchedulerState:
 # ---------------------------
 
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Periodically play advertisement track at a fixed interval."""
+    """Periodically play advertisement track at a fixed interval.
+
+    Behaviour:
+    - The very first interval starts counting when the first main track starts
+      (ui.last_main_path becomes non-None).
+    - After an advertisement finishes, the next interval starts counting from
+      the end of that advertisement.
+    - This pattern continues across tracks.
+    """
+    started_after_main = False
+
     while state.running:
         time.sleep(1)
         with state.lock:
@@ -177,6 +187,13 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             interval = state.ad_interval_sec
         if not ad_file or interval <= 0:
             continue
+
+        # Wait until some main track has been played at least once
+        if not started_after_main:
+            if ui.last_main_path is None:
+                continue
+            started_after_main = True
+
         # Sleep in chunks to allow quick shutdown
         slept = 0
         while state.running and slept < interval:
@@ -184,8 +201,11 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             slept += 1
         if not state.running:
             break
+
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement: {os.path.basename(ad_file)}")
+
+            done = threading.Event()
 
             def on_preempt(prev_kind: str | None, prev_path: str | None) -> None:
                 if prev_kind == "main" and prev_path:
@@ -194,8 +214,19 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             def on_finished(kind: str, _path: str | None) -> None:
                 if kind == "ad":
                     ui.resume_main_if_any()
+                    done.set()
 
-            state.player.play(ad_file, kind="ad", logger=ui.log, on_finished=on_finished, on_preempt=on_preempt)
+            state.player.play(
+                ad_file,
+                kind="ad",
+                logger=ui.log,
+                on_finished=on_finished,
+                on_preempt=on_preempt,
+            )
+
+            # Wait until this advertisement finishes before starting the next interval
+            while state.running and not done.is_set():
+                time.sleep(0.5)
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
