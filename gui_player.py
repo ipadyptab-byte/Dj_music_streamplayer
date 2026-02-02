@@ -71,10 +71,11 @@ class MainTrackPlayer:
             self._offset_sec = 0.0
             self._start_monotonic = time.monotonic()
 
-    def interrupt_for_prayer_and_resume(self, prayer_path: str) -> None:
-        """Pause the main track, play the prayer, then resume the main track.
+    def interrupt_and_resume(self, priority_path: str) -> None:
+        """Pause the main track, play a higher-priority track, then resume.
 
-        This is intended to be called from a background worker thread.
+        Used for both prayer and advertisement interruptions, and intended
+        to be called from a background worker thread.
         """
         main_to_resume: str | None = None
         resume_offset: float = 0.0
@@ -91,9 +92,9 @@ class MainTrackPlayer:
                 main_to_resume = self._current_file
                 resume_offset = self._offset_sec
 
-        # Play the prayer fully (blocking in this worker thread)
-        if os.path.exists(prayer_path):
-            play_with_ffplay(prayer_path)
+        # Play the higher-priority track fully (blocking in this worker thread)
+        if os.path.exists(priority_path):
+            play_with_ffplay(priority_path)
 
         # Resume the main track from where it left off
         if main_to_resume:
@@ -154,8 +155,9 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
         if not state.running:
             break
         if ad_file and os.path.exists(ad_file):
-            ui.log(f"Playing advertisement: {os.path.basename(ad_file)}")
-            play_with_ffplay(ad_file)
+            ui.log(f"Playing advertisement (interrupting main track): {os.path.basename(ad_file)}")
+            # Interrupt the main track (if any), play the ad, then resume main
+            state.main_player.interrupt_and_resume(ad_file)
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
@@ -186,7 +188,7 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     with state.lock:
                         state.prayer_last_run[t] = today
                     # Interrupt main track for higher-priority prayer and resume it afterwards
-                    state.main_player.interrupt_for_prayer_and_resume(prayer_file)
+                    state.main_player.interrupt_and_resume(prayer_file)
 
 
 # ---------------------------
