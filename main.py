@@ -24,8 +24,10 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
 # ===============================
-# Auto-open browser
+# (Legacy) Auto-open browser
 # ===============================
+# Browser UI is no longer used. We keep the helper here for reference,
+# but it is not called anywhere so the app can run headless.
 def open_browser():
     webbrowser.open("http://127.0.0.1:5000")
 
