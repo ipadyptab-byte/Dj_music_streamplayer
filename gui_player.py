@@ -7,6 +7,7 @@ import signal
 import platform
 from datetime import datetime
 import random
+import json
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -178,6 +179,12 @@ class MainTrackPlayer:
 class SchedulerState:
     def __init__(self) -> None:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+        # Where to persist GUI settings between runs
+        self.settings_path = os.path.join(
+            os.path.dirname(__file__), "config", "gui_player_settings.json"
+        )
+
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
 
@@ -208,6 +215,52 @@ class SchedulerState:
 
         self.running = True
         self.lock = threading.Lock()
+
+        # Load any saved settings from disk
+        self._load_from_disk()
+
+    def _load_from_disk(self) -> None:
+        """Load persisted settings (ad/prayer tracks and timings) if present."""
+        if not os.path.exists(self.settings_path):
+            return
+        try:
+            with open(self.settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            # If the file is corrupt or unreadable, ignore it.
+            return
+
+        with self.lock:
+            self.ad_file = data.get("ad_file") or None
+            self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
+
+            self.prayer_file = data.get("prayer_file") or None
+            self.prayer_times = list(data.get("prayer_times", []))
+
+            # prayer_last_run is runtime-only; no need to persist between runs
+
+            # If referenced files no longer exist, clear them
+            if self.ad_file and not os.path.exists(self.ad_file):
+                self.ad_file = None
+            if self.prayer_file and not os.path.exists(self.prayer_file):
+                self.prayer_file = None
+
+    def save_to_disk(self) -> None:
+        """Persist current settings so they survive app restarts."""
+        os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
+        with self.lock:
+            data = {
+                "ad_file": self.ad_file,
+                "ad_interval_sec": self.ad_interval_sec,
+                "prayer_file": self.prayer_file,
+                "prayer_times": self.prayer_times,
+            }
+        try:
+            with open(self.settings_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception:
+            # Persistence failure shouldn't crash the app; ignore errors.
+            pass
 
     # Convenience helpers guarded by lock where needed
 
@@ -379,10 +432,38 @@ class MainWindow:
         # Hook close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        # Load any persisted settings into the UI (ad/prayer tracks & timings)
+        self._load_state_into_ui()
+
         # Periodically update main track timing display
         self._update_main_track_ui()
 
     # ----- UI actions -----
+
+    def _load_state_into_ui(self) -> None:
+        """Populate labels, interval and times from persisted state."""
+        with self.state.lock:
+            ad_file = self.state.ad_file
+            ad_interval_sec = self.state.ad_interval_sec
+            prayer_file = self.state.prayer_file
+            prayer_times = list(self.state.prayer_times)
+
+        # Advertisement UI
+        if ad_file:
+            self.ad_label.config(text=f"Ad track: {os.path.basename(ad_file)}")
+        else:
+            self.ad_label.config(text="No advertisement track selected")
+        self.ad_interval_var.set(str(ad_interval_sec))
+
+        # Prayer UI
+        if prayer_file:
+            self.prayer_label.config(text=f"Prayer track: {os.path.basename(prayer_file)}")
+        else:
+            self.prayer_label.config(text="No prayer track selected")
+
+        self.times_listbox.delete(0, "end")
+        for t in prayer_times:
+            self.times_listbox.insert("end", t)
 
     def _update_clock(self) -> None:
         now_str = datetime.now().strftime("%H:%M:%S")
@@ -460,6 +541,7 @@ class MainWindow:
             shutil.copy2(path, dest)
             with self.state.lock:
                 self.state.ad_file = dest
+            self.state.save_to_disk()
             self.ad_label.config(text=f"Ad track: {os.path.basename(dest)}")
             self.log(f"Advertisement track set: {dest}")
         except Exception as e:
@@ -477,6 +559,7 @@ class MainWindow:
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete advertisement track: {e}")
                 return
+        self.state.save_to_disk()
         self.ad_label.config(text="No advertisement track selected")
 
     def apply_interval(self) -> None:
@@ -489,6 +572,7 @@ class MainWindow:
             return
         with self.state.lock:
             self.state.ad_interval_sec = value
+        self.state.save_to_disk()
         self.log(f"Advertisement interval set to {value} seconds")
 
     def select_prayer_track(self) -> None:
@@ -503,6 +587,7 @@ class MainWindow:
             shutil.copy2(path, dest)
             with self.state.lock:
                 self.state.prayer_file = dest
+            self.state.save_to_disk()
             self.prayer_label.config(text=f"Prayer track: {os.path.basename(dest)}")
             self.log(f"Prayer track set: {dest}")
         except Exception as e:
@@ -520,6 +605,7 @@ class MainWindow:
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to delete prayer track: {e}")
                 return
+        self.state.save_to_disk()
         self.prayer_label.config(text="No prayer track selected")
 
     def add_time(self) -> None:
@@ -536,6 +622,7 @@ class MainWindow:
             self.times_listbox.insert("end", hm)
             with self.state.lock:
                 self.state.prayer_times = list(self.times_listbox.get(0, "end"))
+            self.state.save_to_disk()
             self.log(f"Added prayer time: {hm}")
             dlg.destroy()
 
@@ -557,6 +644,7 @@ class MainWindow:
             self.times_listbox.delete(idx)
         with self.state.lock:
             self.state.prayer_times = list(self.times_listbox.get(0, "end"))
+        self.state.save_to_disk()
         self.log("Removed selected prayer time(s)")
 
     def on_close(self) -> None:
