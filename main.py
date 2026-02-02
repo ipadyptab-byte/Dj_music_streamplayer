@@ -40,9 +40,12 @@ def search_youtube(query):
         'extract_flat': True,
         'no_warnings': True,
     }
+    # Request at least 30 search results (YouTube search is limited by yt_dlp;
+    # if fewer are available, you'll simply get as many as YouTube returns).
+    max_results = 30
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         try:
-            search_results = ydl.extract_info(f"ytsearch20:{query}", download=False)
+            search_results = ydl.extract_info(f"ytsearch{max_results}:{query}", download=False)
             results = []
             if search_results and 'entries' in search_results:
                 for entry in search_results['entries']:
