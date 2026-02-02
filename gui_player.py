@@ -8,7 +8,7 @@ from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from main import UPLOAD_FOLDER
+from main import UPLOAD_FOLDER, search_youtube, get_audio_url
 
 
 # ---------------------------
@@ -117,6 +117,16 @@ class MainWindow:
         self.root = root
         self.state = state
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
+
+        # --- Search & play section ---
+        search_frame = tk.LabelFrame(root, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
+        search_frame.pack(fill="x", padx=10, pady=5)
+
+        self.search_var = tk.StringVar()
+        entry_search = tk.Entry(search_frame, textvariable=self.search_var, width=40)
+        entry_search.pack(side="left", padx=(0, 5), fill="x", expand=True)
+        btn_search = tk.Button(search_frame, text="Search", command=self.search_and_play)
+        btn_search.pack(side="left")
 
         # --- Advertisement section ---
         ad_frame = tk.LabelFrame(root, text="Advertisement Settings", padx=10, pady=10)
@@ -267,6 +277,80 @@ class MainWindow:
         # Signal threads to stop and then destroy window
         self.state.running = False
         self.root.after(200, self.root.destroy)
+
+    # ----- Search & play -----
+
+    def search_and_play(self) -> None:
+        query = self.search_var.get().strip()
+        if not query:
+            messagebox.showinfo("Search", "Please enter a search term.")
+            return
+
+        self.log(f"Searching YouTube for: {query}")
+        try:
+            results = search_youtube(query)
+        except Exception as e:
+            messagebox.showerror("Error", f"Search failed: {e}")
+            return
+
+        if not results:
+            messagebox.showinfo("Search", "No results found.")
+            return
+
+        # Build a simple selection dialog
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Select Track")
+        dlg.geometry("500x300")
+
+        listbox = tk.Listbox(dlg)
+        listbox.pack(fill="both", expand=True, padx=10, pady=10)
+
+        for idx, item in enumerate(results):
+            title = item.get("title", "(no title)")
+            listbox.insert("end", f"{idx + 1}. {title}")
+
+        def on_play() -> None:
+            sel = listbox.curselection()
+            if not sel:
+                return
+            index = sel[0]
+            track = results[index]
+            dlg.destroy()
+            self.play_search_result(track)
+
+        btn_frame = tk.Frame(dlg)
+        btn_frame.pack(fill="x", padx=10, pady=(0, 10))
+        tk.Button(btn_frame, text="Play", command=on_play).pack(side="right")
+
+    def play_search_result(self, track: dict) -> None:
+        url = track.get("url")
+        title = track.get("title", "(no title)")
+        if not url:
+            messagebox.showerror("Error", "Selected track has no URL.")
+            return
+
+        self.log(f"Resolving and playing: {title}")
+        try:
+            audio_rel = get_audio_url(url)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to resolve audio: {e}")
+            return
+
+        if not audio_rel:
+            messagebox.showerror("Error", "Failed to resolve audio URL (yt-dlp error).")
+            return
+
+        # get_audio_url returns something like "/api/uploads/<filename>"
+        # We only need the filename and play the file from UPLOAD_FOLDER
+        fname = os.path.basename(audio_rel)
+        path = os.path.join(UPLOAD_FOLDER, fname)
+        if not os.path.exists(path):
+            messagebox.showerror("Error", f"Audio file not found: {path}")
+            return
+
+        self.log(f"Playing search result: {title}")
+        # Run playback in a background thread so UI stays responsive
+        threading.Thread(target=play_with_ffplay, args=(path,), daemon=True).start()
 
 
 # ---------------------------
