@@ -128,6 +128,10 @@ class SchedulerState:
         # it for higher-priority prayer and then resume.
         self.main_player = MainTrackPlayer()
 
+        # Flag to indicate that a prayer is currently playing so that
+        # advertisements do not interrupt or overlap it.
+        self.in_prayer: bool = False
+
         self.running = True
         self.lock = threading.Lock()
 
@@ -145,7 +149,8 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
         with state.lock:
             ad_file = state.ad_file
             interval = state.ad_interval_sec
-        if not ad_file or interval <= 0:
+            in_prayer = state.in_prayer
+        if not ad_file or interval <= 0 or in_prayer:
             continue
         # Sleep in chunks to allow quick shutdown
         slept = 0
