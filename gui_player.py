@@ -3,6 +3,8 @@ import threading
 import time
 import shutil
 import subprocess
+import signal
+import platform
 from datetime import datetime
 
 import tkinter as tk
@@ -35,6 +37,76 @@ def play_with_ffplay(path: str) -> None:
         )
 
 
+class MainTrackPlayer:
+    """Controls the main track so it can be interrupted and resumed.
+
+    We keep track of the current file and how many seconds have already
+    been played. When a higher‑priority track (prayer) needs to play,
+    we stop the main track, remember the elapsed time and later resume
+    it from that position using ffplay's -ss seek option.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._proc: subprocess.Popen | None = None
+        self._current_file: str | None = None
+        self._offset_sec: float = 0.0
+        self._start_monotonic: float | None = None
+
+    def _start_ffplay(self, path: str, offset_sec: float) -> subprocess.Popen:
+        cmd = ["ffplay", "-nodisp", "-autoexit"]
+        if offset_sec > 0:
+            cmd += ["-ss", str(offset_sec)]
+        cmd.append(path)
+        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def play_new(self, path: str) -> None:
+        """Start playing a new main track from the beginning."""
+        with self._lock:
+            # Stop anything currently playing
+            if self._proc and self._proc.poll() is None:
+                self._proc.terminate()
+            self._proc = self._start_ffplay(path, 0.0)
+            self._current_file = path
+            self._offset_sec = 0.0
+            self._start_monotonic = time.monotonic()
+
+    def interrupt_for_prayer_and_resume(self, prayer_path: str) -> None:
+        """Pause the main track, play the prayer, then resume the main track.
+
+        This is intended to be called from a background worker thread.
+        """
+        main_to_resume: str | None = None
+        resume_offset: float = 0.0
+
+        with self._lock:
+            if self._proc and self._proc.poll() is None and self._current_file:
+                # Calculate how long the main track has already played
+                if self._start_monotonic is not None:
+                    self._offset_sec += time.monotonic() - self._start_monotonic
+                try:
+                    self._proc.terminate()
+                finally:
+                    self._proc = None
+                main_to_resume = self._current_file
+                resume_offset = self._offset_sec
+
+        # Play the prayer fully (blocking in this worker thread)
+        if os.path.exists(prayer_path):
+            play_with_ffplay(prayer_path)
+
+        # Resume the main track from where it left off
+        if main_to_resume:
+            with self._lock:
+                # If a new main track wasn't started in the meantime,
+                # resume the previous one.
+                if self._current_file is None or self._current_file == main_to_resume:
+                    self._proc = self._start_ffplay(main_to_resume, resume_offset)
+                    self._current_file = main_to_resume
+                    self._start_monotonic = time.monotonic()
+                    self._offset_sec = resume_offset
+
+
 # ---------------------------
 # Scheduler state
 # ---------------------------
@@ -50,6 +122,10 @@ class SchedulerState:
         self.prayer_times: list[str] = []
         # Map time string -> last date run ("YYYY-MM-DD")
         self.prayer_last_run: dict[str, str] = {}
+
+        # Controls the main user-selected track so we can interrupt
+        # it for higher-priority prayer and then resume.
+        self.main_player = MainTrackPlayer()
 
         self.running = True
         self.lock = threading.Lock()
@@ -83,7 +159,37 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Check every second and play prayer at configured times."""
+    """Check every second and play prayer at configured times.
+
+    When a prayer starts, we temporarily pause the main track (if any)
+    and resume it after the prayer finishes.
+    """
+    while state.running:
+        time.sleep(1)
+        now = datetime.now()
+        current_hm = now.strftime("%H:%M")
+        today = now.strftime("%Y-%m-%d")
+
+        with state.lock:
+            prayer_file = state.prayer_file
+            times = list(state.prayer_times)
+            last_run = dict(state.prayer_last_run)
+
+        if not prayer_file or not times:
+            continue
+
+        for t in times:
+            if t == current_hm and last_run.get(t) != today:
+                if os.path.exists(prayer_file):
+                    # Update last_run under lock
+                    with state.lock:
+                        state.prayer_last_run[t] = today
+                    ui.play_prayer_with_priority(prayer_file, t)ayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
+    """Check every second and play prayer at configured times.
+
+    When a prayer starts, the main track (if any) is interrupted and will
+    resume automatically from the same position once the prayer finishes.
+    """
     while state.running:
         time.sleep(1)
         now = datetime.now()
@@ -105,7 +211,8 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     # Update last_run under lock
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    play_with_ffplay(prayer_file)
+                    # Interrupt main track for higher-priority prayer and resume it afterwards
+                    state.main_player.interrupt_for_prayer_and_resume(prayer_file)
 
 
 # ---------------------------
@@ -117,6 +224,11 @@ class MainWindow:
         self.root = root
         self.state = state
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
+
+        # --- Clock ---
+        self.clock_label = tk.Label(root, text="--:--:--", font=("TkDefaultFont", 12))
+        self.clock_label.pack(anchor="ne", padx=10, pady=(5, 0))
+        self._update_clock()
 
         # --- Search & play section ---
         search_frame = tk.LabelFrame(root, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
@@ -183,6 +295,11 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     # ----- UI actions -----
+
+    def _update_clock(self) -> None:
+        now_str = datetime.now().strftime("%H:%M:%S")
+        self.clock_label.config(text=now_str)
+        self.root.after(1000, self._update_clock)
 
     def log(self, msg: str) -> None:
         self.log_text.configure(state="normal")
@@ -348,9 +465,9 @@ class MainWindow:
             messagebox.showerror("Error", f"Audio file not found: {path}")
             return
 
-        self.log(f"Playing search result: {title}")
-        # Run playback in a background thread so UI stays responsive
-        threading.Thread(target=play_with_ffplay, args=(path,), daemon=True).start()
+        self.log(f"Playing search result as main track: {title}")
+        # Play as the main track controlled by SchedulerState.main_player
+        threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
 
 # ---------------------------
