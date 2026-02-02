@@ -196,6 +196,12 @@ class SchedulerState:
         # Index of the currently playing item in history (for auto-next)
         self.main_history_index: int | None = None
 
+        # Last Search & Play results and the index of the currently playing
+        # item within that result list. Used to auto-play the next track
+        # from the same search without asking the user again.
+        self.search_results: list[dict] = []
+        self.search_index: int | None = None
+
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
         self.in_prayer: bool = False
@@ -406,34 +412,35 @@ class MainWindow:
         seconds = int(elapsed) % 60
         self.main_time_label.config(text=f"Elapsed: {minutes:02d}:{seconds:02d}")
 
-        # If the previous status indicated a natural end, auto-play a random
-        # track from the history (if available).
+        # If the previous status indicated a natural end, auto-play the next
+        # track from the same Search & Play result list (if available).
         if finished:
-            self._play_random_from_history()
+            self._play_next_from_search_results()
 
         self.root.after(1000, self._update_main_track_ui)
 
-    def _play_random_from_history(self) -> None:
-        """Advance to the next track from Search & Play history.
+    def _play_next_from_search_results(self) -> None:
+        """Play the next track from the last Search & Play result list.
 
-        This simulates "picking a track via Search & Play automatically":
-        we move to the next item in the history list. When we reach the
-        end, we wrap around to the first track.
+        When a user picks a track from Search & Play, we remember the full
+        result list and the index of the chosen track. When that track ends
+        naturally, this method advances to the next item in that same list
+        (if any) and plays it automatically.
         """
         with self.state.lock:
-            if not self.state.main_history:
+            if not self.state.search_results:
                 return
-            # Advance index
-            if self.state.main_history_index is None:
-                self.state.main_history_index = 0
-            else:
-                self.state.main_history_index = (self.state.main_history_index + 1) % len(self.state.main_history)
-            path, title = self.state.main_history[self.state.main_history_index]
-            self.state.main_title = title
-        if not os.path.exists(path):
-            return
-        self.log(f"Auto-playing next main track from history: {title}")
-        threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
+            if self.state.search_index is None:
+                return
+            next_index = self.state.search_index + 1
+            if next_index >= len(self.state.search_results):
+                # Reached the end of this search result list.
+                return
+            track = self.state.search_results[next_index]
+            self.state.search_index = next_index
+        title = track.get("title", "(no title)")
+        self.log(f"Auto-playing next track from Search & Play results: {title}")
+        self.play_search_result(track)
 
     def log(self, msg: str) -> None:
         self.log_text.configure(state="normal")
@@ -613,6 +620,11 @@ class MainWindow:
                 return
             index = sel[0]
             track = results[index]
+            # Remember this search result list and which item was chosen,
+            # so we can auto-play the next track when this one finishes.
+            with self.state.lock:
+                self.state.search_results = results
+                self.state.search_index = index
             dlg.destroy()
             self.play_search_result(track)
 
