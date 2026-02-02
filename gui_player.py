@@ -64,12 +64,13 @@ class FfplayManager:
         except Exception:
             pass
 
-    def play(self, path: str, kind: str, logger=None, on_finished=None, on_preempt=None) -> None:
+    def play(self, path: str, kind: str, logger=None, on_finished=None, on_preempt=None, start_at: float | None = None) -> None:
         """Start playback in a background thread with priority rules.
 
         kind is one of "main", "ad", "prayer".
         on_finished(kind, path) is called when playback ends for this call.
         on_preempt(prev_kind, prev_path) is called if this call stops a previous one.
+        start_at: optional start offset in seconds (used for resuming main).
         """
 
         def worker(proc: subprocess.Popen, finished_callback, started_kind: str) -> None:
