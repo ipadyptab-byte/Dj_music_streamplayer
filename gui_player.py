@@ -161,32 +161,6 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
     """Check every second and play prayer at configured times.
 
-    When a prayer starts, we temporarily pause the main track (if any)
-    and resume it after the prayer finishes.
-    """
-    while state.running:
-        time.sleep(1)
-        now = datetime.now()
-        current_hm = now.strftime("%H:%M")
-        today = now.strftime("%Y-%m-%d")
-
-        with state.lock:
-            prayer_file = state.prayer_file
-            times = list(state.prayer_times)
-            last_run = dict(state.prayer_last_run)
-
-        if not prayer_file or not times:
-            continue
-
-        for t in times:
-            if t == current_hm and last_run.get(t) != today:
-                if os.path.exists(prayer_file):
-                    # Update last_run under lock
-                    with state.lock:
-                        state.prayer_last_run[t] = today
-                    ui.play_prayer_with_priority(prayer_file, t)ayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Check every second and play prayer at configured times.
-
     When a prayer starts, the main track (if any) is interrupted and will
     resume automatically from the same position once the prayer finishes.
     """
@@ -215,6 +189,8 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     state.main_player.interrupt_for_prayer_and_resume(prayer_file)
 
 
+# ---------------------------
+# Tkinter UI
 # ---------------------------
 # Tkinter UI
 # ---------------------------
