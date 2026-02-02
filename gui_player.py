@@ -71,6 +71,12 @@ class MainTrackPlayer:
             self._offset_sec = 0.0
             self._start_monotonic = time.monotonic()
 
+    def _update_offset_locked(self) -> None:
+        """Update the stored offset based on how long the current process has run."""
+        if self._proc and self._proc.poll() is None and self._start_monotonic is not None:
+            self._offset_sec += time.monotonic() - self._start_monotonic
+            self._start_monotonic = time.monotonic()
+
     def interrupt_and_resume(self, priority_path: str) -> None:
         """Pause the main track, play a higher-priority track, then resume.
 
@@ -83,8 +89,7 @@ class MainTrackPlayer:
         with self._lock:
             if self._proc and self._proc.poll() is None and self._current_file:
                 # Calculate how long the main track has already played
-                if self._start_monotonic is not None:
-                    self._offset_sec += time.monotonic() - self._start_monotonic
+                self._update_offset_locked()
                 try:
                     self._proc.terminate()
                 finally:
@@ -107,6 +112,43 @@ class MainTrackPlayer:
                     self._start_monotonic = time.monotonic()
                     self._offset_sec = resume_offset
 
+    def pause(self) -> None:
+        """Pause the main track (can be resumed)."""
+        with self._lock:
+            if self._proc and self._proc.poll() is None:
+                self._update_offset_locked()
+                self._proc.terminate()
+                self._proc = None
+
+    def stop(self) -> None:
+        """Stop the main track and clear state (cannot be resumed)."""
+        with self._lock:
+            if self._proc and self._proc.poll() is None:
+                self._proc.terminate()
+            self._proc = None
+            self._current_file = None
+            self._offset_sec = 0.0
+            self._start_monotonic = None
+
+    def resume(self) -> None:
+        """Resume the main track if paused."""
+        with self._lock:
+            if self._current_file and (self._proc is None or self._proc.poll() is not None):
+                self._proc = self._start_ffplay(self._current_file, self._offset_sec)
+                self._start_monotonic = time.monotonic()
+
+    def get_status(self) -> dict:
+        """Return info about the current main track: path, playing flag, elapsed seconds."""
+        with self._lock:
+            elapsed = self._offset_sec
+            if self._proc and self._proc.poll() is None and self._start_monotonic is not None:
+                elapsed += time.monotonic() - self._start_monotonic
+            return {
+                "file": self._current_file,
+                "is_playing": bool(self._proc and self._proc.poll() is None),
+                "elapsed": elapsed,
+            }
+
 
 # ---------------------------
 # Scheduler state
@@ -127,6 +169,7 @@ class SchedulerState:
         # Controls the main user-selected track so we can interrupt
         # it for higher-priority prayer and then resume.
         self.main_player = MainTrackPlayer()
+        self.main_title: str | None = None
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -223,6 +266,28 @@ class MainWindow:
         btn_search = tk.Button(search_frame, text="Search", command=self.search_and_play)
         btn_search.pack(side="left")
 
+        # --- Main track controls ---
+        main_frame = tk.LabelFrame(root, text="Main Track", padx=10, pady=10)
+        main_frame.pack(fill="x", padx=10, pady=5)
+
+        self.main_track_label = tk.Label(main_frame, text="No main track")
+        self.main_track_label.pack(anchor="w")
+
+        self.main_time_label = tk.Label(main_frame, text="Elapsed: 00:00")
+        self.main_time_label.pack(anchor="w")
+
+        controls_frame = tk.Frame(main_frame)
+        controls_frame.pack(anchor="w", pady=5)
+
+        btn_main_play = tk.Button(controls_frame, text="Play/Resume", command=self.main_play_resume)
+        btn_main_play.pack(side="left", padx=(0, 5))
+
+        btn_main_pause = tk.Button(controls_frame, text="Pause", command=self.main_pause)
+        btn_main_pause.pack(side="left", padx=(0, 5))
+
+        btn_main_stop = tk.Button(controls_frame, text="Stop", command=self.main_stop)
+        btn_main_stop.pack(side="left", padx=(0, 5))
+
         # --- Advertisement section ---
         ad_frame = tk.LabelFrame(root, text="Advertisement Settings", padx=10, pady=10)
         ad_frame.pack(fill="x", padx=10, pady=5)
@@ -283,12 +348,39 @@ class MainWindow:
         # Hook close event
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
+        # Periodically update main track timing display
+        self._update_main_track_ui()
+
     # ----- UI actions -----
 
     def _update_clock(self) -> None:
         now_str = datetime.now().strftime("%H:%M:%S")
         self.clock_label.config(text=now_str)
         self.root.after(1000, self._update_clock)
+
+    def _update_main_track_ui(self) -> None:
+        """Update main track label and elapsed time every second."""
+        status = self.state.main_player.get_status()
+        file_path = status.get("file")
+        is_playing = status.get("is_playing")
+        elapsed = status.get("elapsed", 0.0)
+
+        if file_path:
+            # Prefer stored title if available
+            title = None
+            with self.state.lock:
+                title = self.state.main_title
+            display_name = title or os.path.basename(file_path)
+            state_str = "Playing" if is_playing else "Paused"
+            self.main_track_label.config(text=f"Main track ({state_str}): {display_name}")
+        else:
+            self.main_track_label.config(text="No main track")
+
+        minutes = int(elapsed) // 60
+        seconds = int(elapsed) % 60
+        self.main_time_label.config(text=f"Elapsed: {minutes:02d}:{seconds:02d}")
+
+        self.root.after(1000, self._update_main_track_ui)
 
     def log(self, msg: str) -> None:
         self.log_text.configure(state="normal")
@@ -410,7 +502,26 @@ class MainWindow:
     def on_close(self) -> None:
         # Signal threads to stop and then destroy window
         self.state.running = False
+        # Stop main track process explicitly
+        self.state.main_player.stop()
         self.root.after(200, self.root.destroy)
+
+    def main_play_resume(self) -> None:
+        """Resume the current main track if available."""
+        self.state.main_player.resume()
+        self.log("Main track resumed")
+
+    def main_pause(self) -> None:
+        """Pause the current main track."""
+        self.state.main_player.pause()
+        self.log("Main track paused")
+
+    def main_stop(self) -> None:
+        """Stop the current main track and clear it."""
+        self.state.main_player.stop()
+        with self.state.lock:
+            self.state.main_title = None
+        self.log("Main track stopped")
 
     # ----- Search & play -----
 
@@ -483,6 +594,9 @@ class MainWindow:
             return
 
         self.log(f"Playing search result as main track: {title}")
+        # Remember title for UI display
+        with self.state.lock:
+            self.state.main_title = title
         # Play as the main track controlled by SchedulerState.main_player
         threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
