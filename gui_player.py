@@ -412,15 +412,21 @@ class MainWindow:
         self.root.after(1000, self._update_main_track_ui)
 
     def _play_random_from_history(self) -> None:
-        """Pick a random track from history and start it as the new main track."""
+        """Replay the last main track again if available.
+
+        Despite the name, this intentionally replays the most recently
+        selected main track, so the same track plays again and again
+        when it ends.
+        """
         with self.state.lock:
             if not self.state.main_history:
                 return
-            path, title = random.choice(self.state.main_history)
+            # Take the last selected main track, not a random one
+            path, title = self.state.main_history[-1]
             self.state.main_title = title
         if not os.path.exists(path):
             return
-        self.log(f"Auto-playing next main track: {title}")
+        self.log(f"Auto-replaying main track: {title}")
         threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
     def log(self, msg: str) -> None:
