@@ -187,14 +187,7 @@ class SchedulerState:
         # Map time string -> last date run ("YYYY-MM-DD")
         self.prayer_last_run: dict[str, str] = {}
 
-        # Controls the main user-selected track so we can interrupt
-        # it for higher-priority prayer and then resume.
-        self.main_player = MainTrackPlayer()
-        self.main_title: str | None = None
-        # History of main tracks that have been played (path, title)
-        self.main_history: list[tuple[str, str]] = []
-        # Index of the currently playing item in history (for auto-next)
-        self.main_history_index: int | None = None
+        # Controls the main user-selected track so we can interrupt         # it for higher-priority prayer and then resume.         self.main_player = MainTrackPlayer()         self.main_title: str | None = None         # History of main tracks that have been played (path, title)         self.main_history: list[tuple[str, str]] = []        #  Index of the currently playing item in history (for auto-next)        self .main_history_index:_index: int | None = None
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -406,8 +399,8 @@ class MainWindow:
         seconds = int(elapsed) % 60
         self.main_time_label.config(text=f"Elapsed: {minutes:02d}:{seconds:02d}")
 
-        # If the previous status indicated a natural end, auto-play a random
-        # track from the history (if available).
+        # If the previous status indicated a natural end, auto-play the next
+        # track from the last Search & Play results (if available).
         if finished:
             self._play_random_from_history()
 
@@ -595,6 +588,11 @@ class MainWindow:
             messagebox.showinfo("Search", "No results found.")
             return
 
+        # Remember these results for auto-next behavior
+        with self.state.lock:
+            self.state.last_search_results = results
+            self.state.last_search_index = None
+
         # Build a simple selection dialog
         dlg = tk.Toplevel(self.root)
         dlg.title("Select Track")
@@ -613,6 +611,9 @@ class MainWindow:
                 return
             index = sel[0]
             track = results[index]
+            # Remember which index was chosen so auto-next can pick the next one
+            with self.state.lock:
+                self.state.last_search_index = index
             dlg.destroy()
             self.play_search_result(track)
 
