@@ -228,6 +228,9 @@ class MainWindow:
         btn_ad_select = tk.Button(ad_frame, text="Select Advertisement Track", command=self.select_ad_track)
         btn_ad_select.pack(anchor="w", pady=5)
 
+        btn_ad_clear = tk.Button(ad_frame, text="Delete Advertisement Track", command=self.clear_ad_track)
+        btn_ad_clear.pack(anchor="w")
+
         interval_frame = tk.Frame(ad_frame)
         interval_frame.pack(anchor="w", pady=5)
         tk.Label(interval_frame, text="Play every").pack(side="left")
