@@ -7,11 +7,15 @@ import signal
 import platform
 from datetime import datetime
 import random
+import json
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
 from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "gui_player_state.json")
 
 
 # ---------------------------
