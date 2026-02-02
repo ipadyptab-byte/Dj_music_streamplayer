@@ -35,6 +35,94 @@ def play_with_ffplay(path: str) -> None:
         )
 
 
+class FfplayManager:
+    """Coordinate ffplay processes so playback does not overlap.
+
+    Priority: main < ad < prayer.
+    - A higher-priority kind stops any current playback.
+    - A lower-priority kind will *not* interrupt a higher-priority one.
+    """
+
+    PRIORITY = {"main": 1, "ad": 2, "prayer": 3}
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._proc: subprocess.Popen | None = None
+        self._kind: str | None = None
+
+    def _can_preempt(self, new_kind: str) -> bool:
+        if self._kind is None:
+            return True
+        return self.PRIORITY.get(new_kind, 0) >= self.PRIORITY.get(self._kind, 0)
+
+    def _stop_locked(self) -> None:
+        if not self._proc:
+            return
+        try:
+            self._proc.terminate()
+        except Exception:
+            pass
+
+    def play(self, path: str, kind: str, logger=None) -> None:
+        """Start playback in a background thread with priority rules.
+
+        kind is one of "main", "ad", "prayer".
+        """
+
+        def worker(proc: subprocess.Popen) -> None:
+            try:
+                proc.wait()
+            finally:
+                # Clear only if this is still the active process
+                with self._lock:
+                    if self._proc is proc:
+                        self._proc = None
+                        self._kind = None
+
+        with self._lock:
+            if self._proc is not None and not self._can_preempt(kind):
+                if logger:
+                    logger(
+                        f"Ignoring {kind} playback because higher-priority {self._kind} is currently playing."
+                    )
+                return
+
+            if self._proc is not None and self._can_preempt(kind):
+                if logger:
+                    logger(f"Stopping current {self._kind} playback for new {kind} track.")
+                self._stop_locked()
+
+            try:
+                proc = subprocess.Popen(
+                    [
+                        "ffplay",
+                        "-nodisp",
+                        "-autoexit",
+                        path,
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except FileNotFoundError:
+                if logger is not None:
+                    logger(
+                        "ffplay (from ffmpeg) is not installed or not on PATH. "
+                        "Please install ffmpeg and restart the application."
+                    )
+                else:
+                    messagebox.showerror(
+                        "ffplay not found",
+                        "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+                        "Please install ffmpeg and restart the application.",
+                    )
+                return
+
+            self._proc = proc
+            self._kind = kind
+
+        threading.Thread(target=worker, args=(proc,), daemon=True).start()
+
+
 # ---------------------------
 # Scheduler state
 # ---------------------------
@@ -50,6 +138,9 @@ class SchedulerState:
         self.prayer_times: list[str] = []
         # Map time string -> last date run ("YYYY-MM-DD")
         self.prayer_last_run: dict[str, str] = {}
+
+        # Single shared ffplay manager for all playback kinds
+        self.player = FfplayManager()
 
         self.running = True
         self.lock = threading.Lock()
@@ -79,7 +170,7 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             break
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement: {os.path.basename(ad_file)}")
-            play_with_ffplay(ad_file)
+            state.player.play(ad_file, kind="ad", logger=ui.log)
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
@@ -105,7 +196,7 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     # Update last_run under lock
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    play_with_ffplay(prayer_file)
+                    state.player.play(prayer_file, kind="prayer", logger=ui.log)
 
 
 # ---------------------------
@@ -349,8 +440,8 @@ class MainWindow:
             return
 
         self.log(f"Playing search result: {title}")
-        # Run playback in a background thread so UI stays responsive
-        threading.Thread(target=play_with_ffplay, args=(path,), daemon=True).start()
+        # Use shared manager so playback obeys priority rules
+        self.state.player.play(path, kind="main", logger=self.log)
 
 
 # ---------------------------
