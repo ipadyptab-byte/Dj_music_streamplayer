@@ -6,6 +6,7 @@ import subprocess
 import signal
 import platform
 from datetime import datetime
+import random
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -138,15 +139,35 @@ class MainTrackPlayer:
                 self._start_monotonic = time.monotonic()
 
     def get_status(self) -> dict:
-        """Return info about the current main track: path, playing flag, elapsed seconds."""
+        """Return info about the current main track: path, playing flag, elapsed seconds.
+
+        Also signals when a track has ended *naturally* (not via user stop/pause
+        or priority interruption) via the "finished" flag.
+        """
         with self._lock:
+            # Detect natural end
+            finished = False
+            if self._proc and self._proc.poll() is not None:
+                # Process ended; if no explicit stop reason, treat as natural end
+                if getattr(self, "_stop_reason", None) is None and self._current_file is not None:
+                    finished = True
+                # Clear state regardless
+                self._proc = None
+                self._current_file = None
+                self._offset_sec = 0.0
+                self._start_monotonic = None
+                if hasattr(self, "_stop_reason"):
+                    self._stop_reason = None
+
             elapsed = self._offset_sec
             if self._proc and self._proc.poll() is None and self._start_monotonic is not None:
                 elapsed += time.monotonic() - self._start_monotonic
+
             return {
                 "file": self._current_file,
                 "is_playing": bool(self._proc and self._proc.poll() is None),
                 "elapsed": elapsed,
+                "finished": finished,
             }
 
 
@@ -170,6 +191,8 @@ class SchedulerState:
         # it for higher-priority prayer and then resume.
         self.main_player = MainTrackPlayer()
         self.main_title: str | None = None
+        # History of main tracks that have been played (path, title)
+        self.main_history: list[tuple[str, str]] = []
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -364,6 +387,7 @@ class MainWindow:
         file_path = status.get("file")
         is_playing = status.get("is_playing")
         elapsed = status.get("elapsed", 0.0)
+        finished = status.get("finished", False)
 
         if file_path:
             # Prefer stored title if available
@@ -380,7 +404,24 @@ class MainWindow:
         seconds = int(elapsed) % 60
         self.main_time_label.config(text=f"Elapsed: {minutes:02d}:{seconds:02d}")
 
+        # If the previous status indicated a natural end, auto-play a random
+        # track from the history (if available).
+        if finished:
+            self._play_random_from_history()
+
         self.root.after(1000, self._update_main_track_ui)
+
+    def _play_random_from_history(self) -> None:
+        """Pick a random track from history and start it as the new main track."""
+        with self.state.lock:
+            if not self.state.main_history:
+                return
+            path, title = random.choice(self.state.main_history)
+            self.state.main_title = title
+        if not os.path.exists(path):
+            return
+        self.log(f"Auto-playing next main track: {title}")
+        threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
     def log(self, msg: str) -> None:
         self.log_text.configure(state="normal")
@@ -594,9 +635,10 @@ class MainWindow:
             return
 
         self.log(f"Playing search result as main track: {title}")
-        # Remember title for UI display
+        # Remember title and track in history for UI and auto-next
         with self.state.lock:
             self.state.main_title = title
+            self.state.main_history.append((path, title))
         # Play as the main track controlled by SchedulerState.main_player
         threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
