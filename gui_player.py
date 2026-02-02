@@ -246,6 +246,9 @@ class MainWindow:
         btn_prayer_select = tk.Button(prayer_frame, text="Select Prayer Track", command=self.select_prayer_track)
         btn_prayer_select.pack(anchor="w", pady=5)
 
+        btn_prayer_clear = tk.Button(prayer_frame, text="Delete Prayer Track", command=self.clear_prayer_track)
+        btn_prayer_clear.pack(anchor="w")
+
         times_frame = tk.Frame(prayer_frame)
         times_frame.pack(fill="x", pady=5)
 
@@ -300,6 +303,20 @@ class MainWindow:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to copy file: {e}")
 
+    def clear_ad_track(self) -> None:
+        """Delete the current advertisement track file and clear the setting."""
+        with self.state.lock:
+            ad_path = self.state.ad_file
+            self.state.ad_file = None
+        if ad_path and os.path.exists(ad_path):
+            try:
+                os.remove(ad_path)
+                self.log(f"Deleted advertisement track: {ad_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete advertisement track: {e}")
+                return
+        self.ad_label.config(text="No advertisement track selected")
+
     def apply_interval(self) -> None:
         try:
             value = int(self.ad_interval_var.get())
@@ -328,6 +345,20 @@ class MainWindow:
             self.log(f"Prayer track set: {dest}")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to copy file: {e}")
+
+    def clear_prayer_track(self) -> None:
+        """Delete the current prayer track file and clear the setting."""
+        with self.state.lock:
+            prayer_path = self.state.prayer_file
+            self.state.prayer_file = None
+        if prayer_path and os.path.exists(prayer_path):
+            try:
+                os.remove(prayer_path)
+                self.log(f"Deleted prayer track: {prayer_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to delete prayer track: {e}")
+                return
+        self.prayer_label.config(text="No prayer track selected")
 
     def add_time(self) -> None:
         def on_ok() -> None:
