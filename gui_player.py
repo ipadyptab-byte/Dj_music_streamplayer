@@ -193,6 +193,8 @@ class SchedulerState:
         self.main_title: str | None = None
         # History of main tracks that have been played (path, title)
         self.main_history: list[tuple[str, str]] = []
+        # Index of the currently playing item in history (for auto-next)
+        self.main_history_index: int | None = None
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -412,21 +414,25 @@ class MainWindow:
         self.root.after(1000, self._update_main_track_ui)
 
     def _play_random_from_history(self) -> None:
-        """Replay the last main track again if available.
+        """Advance to the next track from Search & Play history.
 
-        Despite the name, this intentionally replays the most recently
-        selected main track, so the same track plays again and again
-        when it ends.
+        This simulates "picking a track via Search & Play automatically":
+        we move to the next item in the history list. When we reach the
+        end, we wrap around to the first track.
         """
         with self.state.lock:
             if not self.state.main_history:
                 return
-            # Take the last selected main track, not a random one
-            path, title = self.state.main_history[-1]
+            # Advance index
+            if self.state.main_history_index is None:
+                self.state.main_history_index = 0
+            else:
+                self.state.main_history_index = (self.state.main_history_index + 1) % len(self.state.main_history)
+            path, title = self.state.main_history[self.state.main_history_index]
             self.state.main_title = title
         if not os.path.exists(path):
             return
-        self.log(f"Auto-replaying main track: {title}")
+        self.log(f"Auto-playing next main track from history: {title}")
         threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
     def log(self, msg: str) -> None:
@@ -645,6 +651,8 @@ class MainWindow:
         with self.state.lock:
             self.state.main_title = title
             self.state.main_history.append((path, title))
+            # Newly selected track becomes the current index
+            self.state.main_history_index = len(self.state.main_history) - 1
         # Play as the main track controlled by SchedulerState.main_player
         threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
 
