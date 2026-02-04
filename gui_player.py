@@ -187,6 +187,7 @@ class SchedulerState:
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
+        self.ad_enabled: bool = True
 
         self.prayer_file: str | None = None
         # List[str] of "HH:MM" times
@@ -231,8 +232,8 @@ class SchedulerState:
             return
 
         with self.lock:
-            self.ad_file = data.get("ad_file") or None
-            self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
+            self.ad_file = data.get("ad_file") or None             self.ad_interval_sec = int(data.get("ad_interval_sec", 180))            self.ad_enabled = bool(data.get("ad_enabled", True
+)
 
             self.prayer_file = data.get("prayer_file") or None
             self.prayer_times = list(data.get("prayer_times", []))
@@ -252,6 +253,7 @@ class SchedulerState:
             data = {
                 "ad_file": self.ad_file,
                 "ad_interval_sec": self.ad_interval_sec,
+                "ad_enabled": self.ad_enabled,
                 "prayer_file": self.prayer_file,
                 "prayer_times": self.prayer_times,
             }
@@ -430,6 +432,16 @@ class MainWindow:
         btn_apply_interval = tk.Button(ad_frame, text="Apply Interval", command=self.apply_interval)
         btn_apply_interval.pack(anchor="w")
 
+        # Enable / Disable ads toggle
+        self.ad_enabled_var = tk.BooleanVar(value=True)
+        chk_ad_enabled = tk.Checkbutton(
+            ad_frame,
+            text="Enable advertisement playback",
+            variable=self.ad_enabled_var,
+            command=self.toggle_ad_enabled,
+        )
+        chk_ad_enabled.pack(anchor="w", pady=(5, 0))
+
         # --- Prayer section ---
         prayer_frame = tk.LabelFrame(root, text="Prayer Settings", padx=10, pady=10)
         prayer_frame.pack(fill="x", padx=10, pady=5)
@@ -480,6 +492,7 @@ class MainWindow:
         with self.state.lock:
             ad_file = self.state.ad_file
             ad_interval_sec = self.state.ad_interval_sec
+            ad_enabled = self.state.ad_enabled
             prayer_file = self.state.prayer_file
             prayer_times = list(self.state.prayer_times)
 
@@ -489,6 +502,7 @@ class MainWindow:
         else:
             self.ad_label.config(text="No advertisement track selected")
         self.ad_interval_var.set(str(ad_interval_sec))
+        self.ad_enabled_var.set(ad_enabled)
 
         # Prayer UI
         if prayer_file:
@@ -596,6 +610,17 @@ class MainWindow:
                 return
         self.state.save_to_disk()
         self.ad_label.config(text="No advertisement track selected")
+
+    def toggle_ad_enabled(self) -> None:
+        """Enable or disable periodic advertisement playback."""
+        value = bool(self.ad_enabled_var.get())
+        with self.state.lock:
+            self.state.ad_enabled = value
+        self.state.save_to_disk()
+        if value:
+            self.log("Advertisement playback enabled")
+        else:
+            self.log("Advertisement playback disabled")
 
     def apply_interval(self) -> None:
         try:
