@@ -232,9 +232,12 @@ class SchedulerState:
             return
 
         with self.lock:
-            self.ad_file = data.get("ad_file") or None             self.ad_interval_sec = int(data.get("ad_interval_sec", 180))            self.ad_enabled = bool(data.get("ad_enabled", True
-)
+            # Advertisement settings
+            self.ad_file = data.get("ad_file") or None
+            self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
+            self.ad_enabled = bool(data.get("ad_enabled", True))
 
+            # Prayer settings
             self.prayer_file = data.get("prayer_file") or None
             self.prayer_times = list(data.get("prayer_times", []))
 
