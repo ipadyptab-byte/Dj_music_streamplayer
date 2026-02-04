@@ -381,8 +381,23 @@
                     const lastRunDate = row.dataset.lastRunDate || null;
                     
                     // Trigger once per day per time
-                    if (checkbox.checked && setTime === currentTime && !isIntervalPlaying && lastRunDate !== todayStr) {
+                    if (checkbox.checked && setTime === currentTime && lastRunDate !== todayStr) {
                         console.log('Triggering scheduled play at:', currentTime);
+
+                        // If an interval (advertisement) track is playing at this moment,
+                        // stop it so that the prayer/scheduled track can play.
+                        if (isIntervalPlaying && intervalAudio) {
+                            try {
+                                intervalAudio.pause();
+                                intervalAudio.currentTime = 0;
+                                intervalAudio.src = "";
+                                intervalAudio.load();
+                            } catch (e) {
+                                console.error('Error stopping interval audio from scheduler:', e);
+                            }
+                            isIntervalPlaying = false;
+                        }
+
                         playScheduleTrack();
                         row.dataset.lastRunDate = todayStr;
                         saveScheduleTimes();
@@ -396,6 +411,20 @@
             const mainPlayer = document.getElementById('audio-player');
             const wasPlaying = !mainPlayer.paused;
             const originalTrackTitle = document.getElementById('current-track').innerText;
+
+            // If an interval (advertisement) track is currently playing,
+            // stop it when prayer/scheduled track starts.
+            if (isIntervalPlaying && intervalAudio) {
+                try {
+                    intervalAudio.pause();
+                    intervalAudio.currentTime = 0;
+                    intervalAudio.src = "";
+                    intervalAudio.load();
+                } catch (e) {
+                    console.error('Error stopping interval audio before scheduled play:', e);
+                }
+                isIntervalPlaying = false;
+            }
             
             // Explicitly pause the main player to maintain its position
             mainPlayer.pause();
@@ -560,11 +589,18 @@
                     }
                     
                     if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
+                        // Use global intervalAudio so we can stop it from schedule/prayer logic
+                        intervalAudio = new Audio(audioUrl);
                         const cleanup = () => {
                             isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
+                            try {
+                                intervalAudio.pause();
+                                intervalAudio.currentTime = 0;
+                                intervalAudio.src = "";
+                                intervalAudio.load();
+                            } catch (e) {
+                                console.error('Error cleaning up interval audio:', e);
+                            }
                             if (wasPlaying) {
                                 mainPlayer.play().catch(e => console.error("Resume failed:", e));
                             }
