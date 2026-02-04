@@ -187,6 +187,7 @@ class SchedulerState:
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
+        self.ad_enabled: bool = True
 
         self.prayer_file: str | None = None
         # List[str] of "HH:MM" times
@@ -231,9 +232,12 @@ class SchedulerState:
             return
 
         with self.lock:
+            # Advertisement settings
             self.ad_file = data.get("ad_file") or None
             self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
+            self.ad_enabled = bool(data.get("ad_enabled", True))
 
+            # Prayer settings
             self.prayer_file = data.get("prayer_file") or None
             self.prayer_times = list(data.get("prayer_times", []))
 
@@ -252,6 +256,7 @@ class SchedulerState:
             data = {
                 "ad_file": self.ad_file,
                 "ad_interval_sec": self.ad_interval_sec,
+                "ad_enabled": self.ad_enabled,
                 "prayer_file": self.prayer_file,
                 "prayer_times": self.prayer_times,
             }
@@ -270,22 +275,50 @@ class SchedulerState:
 # ---------------------------
 
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Periodically play advertisement track at a fixed interval."""
+    """Periodically play advertisement track at a fixed interval.
+
+    Ads should:
+    - Never play while a prayer is playing.
+    - Only play when a main track is currently playing.
+    """
     while state.running:
         time.sleep(1)
         with state.lock:
             ad_file = state.ad_file
             interval = state.ad_interval_sec
-            in_prayer = state.in_prayer
-        if not ad_file or interval <= 0 or in_prayer:
+
+        if not ad_file or interval <= 0:
             continue
-        # Sleep in chunks to allow quick shutdown
+
+        # Sleep in 1s chunks, but only count time while main track is playing
+        # and no prayer is in progress. If either condition changes, restart
+        # the wait so that ads only fire relative to active main playback.
         slept = 0
         while state.running and slept < interval:
             time.sleep(1)
+            # Check current prayer/main-track state each second
+            with state.lock:
+                in_prayer = state.in_prayer
+            status = state.main_player.get_status()
+            if in_prayer or not status.get("is_playing", False):
+                # Prayer started or main track stopped/paused; abort this cycle
+                break
             slept += 1
+
         if not state.running:
             break
+        # If we exited early due to prayer or main track not playing,
+        # skip playing an ad this cycle.
+        if slept < interval:
+            continue
+
+        # Final safety check right before playing the ad
+        with state.lock:
+            in_prayer = state.in_prayer
+        status = state.main_player.get_status()
+        if in_prayer or not status.get("is_playing", False):
+            continue
+
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement (interrupting main track): {os.path.basename(ad_file)}")
             # Interrupt the main track (if any), play the ad, then resume main
@@ -319,8 +352,15 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     # Update last_run under lock
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    # Interrupt main track for higher-priority prayer and resume it afterwards
-                    state.main_player.interrupt_and_resume(prayer_file)
+                        state.in_prayer = True
+                    try:
+                        # Interrupt main track for higher-priority prayer and
+                        # resume it afterwards
+                        state.main_player.interrupt_and_resume(prayer_file)
+                    finally:
+                        # Clear prayer flag when done so ads can resume later
+                        with state.lock:
+                            state.in_prayer = False
 
 
 # ---------------------------
@@ -395,6 +435,16 @@ class MainWindow:
         btn_apply_interval = tk.Button(ad_frame, text="Apply Interval", command=self.apply_interval)
         btn_apply_interval.pack(anchor="w")
 
+        # Enable / Disable ads toggle
+        self.ad_enabled_var = tk.BooleanVar(value=True)
+        chk_ad_enabled = tk.Checkbutton(
+            ad_frame,
+            text="Enable advertisement playback",
+            variable=self.ad_enabled_var,
+            command=self.toggle_ad_enabled,
+        )
+        chk_ad_enabled.pack(anchor="w", pady=(5, 0))
+
         # --- Prayer section ---
         prayer_frame = tk.LabelFrame(root, text="Prayer Settings", padx=10, pady=10)
         prayer_frame.pack(fill="x", padx=10, pady=5)
@@ -445,6 +495,7 @@ class MainWindow:
         with self.state.lock:
             ad_file = self.state.ad_file
             ad_interval_sec = self.state.ad_interval_sec
+            ad_enabled = self.state.ad_enabled
             prayer_file = self.state.prayer_file
             prayer_times = list(self.state.prayer_times)
 
@@ -454,6 +505,7 @@ class MainWindow:
         else:
             self.ad_label.config(text="No advertisement track selected")
         self.ad_interval_var.set(str(ad_interval_sec))
+        self.ad_enabled_var.set(ad_enabled)
 
         # Prayer UI
         if prayer_file:
@@ -561,6 +613,17 @@ class MainWindow:
                 return
         self.state.save_to_disk()
         self.ad_label.config(text="No advertisement track selected")
+
+    def toggle_ad_enabled(self) -> None:
+        """Enable or disable periodic advertisement playback."""
+        value = bool(self.ad_enabled_var.get())
+        with self.state.lock:
+            self.state.ad_enabled = value
+        self.state.save_to_disk()
+        if value:
+            self.log("Advertisement playback enabled")
+        else:
+            self.log("Advertisement playback disabled")
 
     def apply_interval(self) -> None:
         try:
