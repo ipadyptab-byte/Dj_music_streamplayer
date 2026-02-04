@@ -270,22 +270,50 @@ class SchedulerState:
 # ---------------------------
 
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Periodically play advertisement track at a fixed interval."""
+    """Periodically play advertisement track at a fixed interval.
+
+    Ads should:
+    - Never play while a prayer is playing.
+    - Only play when a main track is currently playing.
+    """
     while state.running:
         time.sleep(1)
         with state.lock:
             ad_file = state.ad_file
             interval = state.ad_interval_sec
-            in_prayer = state.in_prayer
-        if not ad_file or interval <= 0 or in_prayer:
+
+        if not ad_file or interval <= 0:
             continue
-        # Sleep in chunks to allow quick shutdown
+
+        # Sleep in 1s chunks, but only count time while main track is playing
+        # and no prayer is in progress. If either condition changes, restart
+        # the wait so that ads only fire relative to active main playback.
         slept = 0
         while state.running and slept < interval:
             time.sleep(1)
+            # Check current prayer/main-track state each second
+            with state.lock:
+                in_prayer = state.in_prayer
+            status = state.main_player.get_status()
+            if in_prayer or not status.get("is_playing", False):
+                # Prayer started or main track stopped/paused; abort this cycle
+                break
             slept += 1
+
         if not state.running:
             break
+        # If we exited early due to prayer or main track not playing,
+        # skip playing an ad this cycle.
+        if slept < interval:
+            continue
+
+        # Final safety check right before playing the ad
+        with state.lock:
+            in_prayer = state.in_prayer
+        status = state.main_player.get_status()
+        if in_prayer or not status.get("is_playing", False):
+            continue
+
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement (interrupting main track): {os.path.basename(ad_file)}")
             # Interrupt the main track (if any), play the ad, then resume main
@@ -319,8 +347,15 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     # Update last_run under lock
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    # Interrupt main track for higher-priority prayer and resume it afterwards
-                    state.main_player.interrupt_and_resume(prayer_file)
+                        state.in_prayer = True
+                    try:
+                        # Interrupt main track for higher-priority prayer and
+                        # resume it afterwards
+                        state.main_player.interrupt_and_resume(prayer_file)
+                    finally:
+                        # Clear prayer flag when done so ads can resume later
+                        with state.lock:
+                            state.in_prayer = False
 
 
 # ---------------------------
