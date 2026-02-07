@@ -98,13 +98,15 @@ def get_audio_url(video_url):
             print('yt-dlp executable not found on PATH')
             return None
 
-        # Download to our UPLOAD_FOLDER using yt-dlp CLI
+        # Download to our UPLOAD_FOLDER using yt-dlp CLI and ask it to print
+        # the final filename ("%(id)s.%(ext)s") so we know what to serve.
         out_tmpl = os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s')
         result = subprocess.run(
             [
                 ytdlp_path,
                 '-f', 'bestaudio/best',
                 '-o', out_tmpl,
+                '--print', '%(id)s.%(ext)s',
                 video_url,
             ],
             capture_output=True,
@@ -114,10 +116,20 @@ def get_audio_url(video_url):
             print('yt-dlp executable download failed:', result.stderr)
             return None
 
-        # At this point yt-dlp CLI has downloaded the file to UPLOAD_FOLDER,
-        # but we don't know the exact name without extra probing.
-        print('yt-dlp CLI download completed, but filename not resolved in code.')
-        return None
+        # Last non-empty line of stdout should be the filename we asked yt-dlp
+        # to print ("<id>.<ext>").
+        stdout = (result.stdout or '').strip().splitlines()
+        if not stdout:
+            print('yt-dlp CLI did not print a filename')
+            return None
+        filename = stdout[-1].strip()
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        if not os.path.exists(file_path):
+            print('yt-dlp CLI reported filename but file not found:', file_path)
+            return None
+
+        local_url = f"/api/uploads/{filename}"
+        return local_url
     except Exception as e:
         print('yt-dlp executable fallback failed:', e)
         return None
