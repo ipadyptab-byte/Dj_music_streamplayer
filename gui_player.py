@@ -395,10 +395,14 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                         state.prayer_last_run[t] = today
                         state.in_prayer = True
                     try:
-                        ui.log("Pausing main track and starting prayer track.")
-                        # Interrupt main track for higher-priority prayer and resume it afterwards
-                        state.main_player.interrupt_and_resume(prayer_file)
-                        ui.log("Prayer track finished, resuming main track (if it was playing before).")
+                        # Pause main track explicitly so only prayer plays
+                        ui.log("Pausing main track for prayer.")
+                        state.main_player.pause()
+                        # Play prayer track fully (blocking) without touching main state
+                        ui.log("Starting prayer track.")
+                        play_with_ffplay(prayer_file)
+                        ui.log("Prayer track finished, attempting to resume main track (if it was playing before).")
+                        state.main_player.resume()
                     finally:
                         # Allow ads again after prayer finishes
                         with state.lock:
