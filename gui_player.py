@@ -201,11 +201,16 @@ class MainTrackPlayer:
                 self._priority_proc.terminate()
             self._priority_proc = None
 
-    def play_ad_blocking(self, path: str) -> None:
+    def play_ad_blocking(self, path: str, expected_duration: float | None = None) -> None:
         """Play an advertisement, tracking its process so it can be stopped.
 
         Pauses the main track, plays the ad, and leaves main paused.
         The caller decides whether and when to resume main.
+
+        If expected_duration is provided, we will keep the main track paused
+        for at least that many seconds, even if ffplay exits early for some
+        reason. This guarantees that the "logical" ad length is honoured
+        before resuming the main player.
         """
         # Pause main track if it's playing
         with self._lock:
@@ -216,15 +221,41 @@ class MainTrackPlayer:
                 self._proc = None
         # Start ad as a tracked priority process
         start_ts = time.monotonic()
-        proc = self._start_ffplay(path, 0.0)
+        proc = self._start_ffplay(path, 0.0, normalize=False)
         with self._lock:
             self._priority_proc = proc
         try:
-            proc.wait()
+            if expected_duration is not None and expected_duration > 0:
+                # Wait at least expected_duration seconds from start, even if
+                # ffplay exits early. This may introduce some silence, but it
+                # guarantees that the main track only resumes after the full
+                # configured advertisement length has elapsed.
+                while True:
+                    elapsed = time.monotonic() - start_ts
+                    if elapsed >= expected_duration:
+                        break
+                    if proc.poll() is not None:
+                        # ffplay ended early; just sleep the remaining time
+                        time.sleep(max(0.0, expected_duration - elapsed))
+                        break
+                    # Sleep in short chunks so we can notice process exit
+                    time.sleep(min(0.5, expected_duration - elapsed))
+            else:
+                # No known duration; fall back to the process lifetime
+                proc.wait()
         finally:
-            elapsed = time.monotonic() - start_ts
-            # Simple debug print to help diagnose if ads are being cut short
-            print(f"[DEBUG] Ad playback finished, elapsed ~{elapsed:.1f}s for file: {path}")
+            total_elapsed = time.monotonic() - start_ts
+            print(f"[DEBUG] Ad playback finished, elapsed ~{total_elapsed:.1f}s for file: {path}")
+            # Ensure the ffplay process is not left running indefinitely
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
             with self._lock:
                 if getattr(self, "_priority_proc", None) is proc:
                     self._priority_proc = None
@@ -278,6 +309,8 @@ class SchedulerState:
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
+        # Duration (seconds) of the current advertisement track, if known
+        self.ad_duration_sec: float | None = None
 
         self.prayer_file: str | None = None
         # List[str] of "HH:MM" times
@@ -324,6 +357,7 @@ class SchedulerState:
         with self.lock:
             self.ad_file = data.get("ad_file") or None
             self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
+            self.ad_duration_sec = float(data.get("ad_duration_sec")) if data.get("ad_duration_sec") is not None else None
 
             self.prayer_file = data.get("prayer_file") or None
             self.prayer_times = list(data.get("prayer_times", []))
@@ -343,6 +377,7 @@ class SchedulerState:
             data = {
                 "ad_file": self.ad_file,
                 "ad_interval_sec": self.ad_interval_sec,
+                "ad_duration_sec": self.ad_duration_sec,
                 "prayer_file": self.prayer_file,
                 "prayer_times": self.prayer_times,
             }
@@ -404,10 +439,13 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 "Advertisement cycle: pausing main track for ad "
                 f"({os.path.basename(ad_file)})"
             )
-            # Play ad as a tracked priority process so it can be stopped by prayer
-            try:
-                state.main_player.play_ad_blocking(ad_file)
-            finally:
+            # Play ad as a tracked priority process so it can be stopped by prayer             # Use the probed duration (if available) so we honour the full ad             # length even if ffplay exits early.            with state.lock:
+                ad_duration = state.ad_duration_sec            try:
+                state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)            finally:
+
+
+
+ly:
                 # Only resume main if not in prayer anymore
                 with state.lock:
                     in_prayer_now = state.in_prayer
@@ -738,11 +776,41 @@ class MainWindow:
         try:
             dest = os.path.join(UPLOAD_FOLDER, os.path.basename(path))
             shutil.copy2(path, dest)
+
+            # Probe duration using ffprobe so we know how long to keep main paused
+            duration_sec: float | None = None
+            try:
+                import subprocess, json as _json
+                cmd = [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "json",
+                    dest,
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                if result.returncode == 0 and result.stdout:
+                    info = _json.loads(result.stdout)
+                    dur_str = info.get("format", {}).get("duration")
+                    if dur_str is not None:
+                        duration_sec = float(dur_str)
+            except Exception:
+                # If ffprobe is not available or fails, we simply won't enforce
+                # a specific duration and will fall back to process lifetime.
+                duration_sec = None
+
             with self.state.lock:
                 self.state.ad_file = dest
+                self.state.ad_duration_sec = duration_sec
             self.state.save_to_disk()
             self.ad_label.config(text=f"Ad track: {os.path.basename(dest)}")
-            self.log(f"Advertisement track set: {dest}")
+            if duration_sec is not None:
+                self.log(f"Advertisement track set: {dest} (duration ~{duration_sec:.1f}s)")
+            else:
+                self.log(f"Advertisement track set: {dest} (duration unknown)")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to copy file: {e}")
 
@@ -751,6 +819,7 @@ class MainWindow:
         with self.state.lock:
             ad_path = self.state.ad_file
             self.state.ad_file = None
+            self.state.ad_duration_sec = None
         if ad_path and os.path.exists(ad_path):
             try:
                 os.remove(ad_path)
