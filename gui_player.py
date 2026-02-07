@@ -326,11 +326,17 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
             if t == current_hm and last_run.get(t) != today:
                 if os.path.exists(prayer_file):
                     ui.log(f"Playing prayer for scheduled time {t}: {os.path.basename(prayer_file)}")
-                    # Update last_run under lock
+                    # Mark that a prayer is in progress so ads do not play
                     with state.lock:
                         state.prayer_last_run[t] = today
-                    # Interrupt main track for higher-priority prayer and resume it afterwards
-                    state.main_player.interrupt_and_resume(prayer_file)
+                        state.in_prayer = True
+                    try:
+                        # Interrupt main track for higher-priority prayer and resume it afterwards
+                        state.main_player.interrupt_and_resume(prayer_file)
+                    finally:
+                        # Allow ads again after prayer finishes
+                        with state.lock:
+                            state.in_prayer = False
 
 
 # ---------------------------
