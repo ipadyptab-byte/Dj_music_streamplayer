@@ -463,12 +463,42 @@ class MainWindow:
         self.state = state
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
 
+        # Try to set window icon from a local file if available
+        # Place a suitable .ico or .png file at static/app_icon.ico or static/app_icon.png
+        icon_path_ico = os.path.join(os.path.dirname(__file__), "static", "app_icon.ico")
+        icon_path_png = os.path.join(os.path.dirname(__file__), "static", "app_icon.png")
+        try:
+            if os.path.exists(icon_path_ico):
+                self.root.iconbitmap(icon_path_ico)
+            elif os.path.exists(icon_path_png):
+                icon_img = tk.PhotoImage(file=icon_path_png)
+                self.root.iconphoto(True, icon_img)
+                # Keep a reference so it is not garbage-collected
+                self._icon_img = icon_img
+        except Exception:
+            # If icon loading fails, continue without crashing
+            pass
+
         # Main layout: left side for controls, right side for log
         left_frame = tk.Frame(root)
         left_frame.pack(side="left", fill="both", expand=True)
 
         log_container = tk.Frame(root)
         log_container.pack(side="right", fill="both", padx=(5, 10), pady=10)
+
+        # --- Logo at the top ---
+        # Place your logo image (e.g. the Devi Jewellers banner) at static/logo.png
+        logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
+        self._logo_img = None
+        if os.path.exists(logo_path):
+            try:
+                self._logo_img = tk.PhotoImage(file=logo_path)
+                logo_label = tk.Label(left_frame, image=self._logo_img)
+                # Center the logo at the top of the app UI
+                logo_label.pack(anchor="n", pady=(10, 5))
+            except Exception:
+                # If logo fails to load, ignore and continue
+                pass
 
         # --- Clock ---
         self.clock_label = tk.Label(left_frame, text="--:--:--", font=("TkDefaultFont", 12))
