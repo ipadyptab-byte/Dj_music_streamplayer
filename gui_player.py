@@ -490,14 +490,9 @@ class MainWindow:
         # Place your logo image (e.g. the Devi Jewellers banner) at static/logo.png
         logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
         self._logo_img = None
-        if os.path.exists(logo_path):
-            try:
-                self._logo_img = tk.PhotoImage(file=logo_path)
-                logo_label = tk.Label(left_frame, image=self._logo_img)
-                logo_label.pack(anchor="nw", padx=10, pady=(5, 0))
-            except Exception:
-                # If logo fails to load, ignore and continue
-                pass
+        if os.path.exists(logo_path):             try:                 self._logo_img = tk.PhotoImage(file=logo_path)                 logo_label = tk.Label(left_frame, image=self._logo_img)                 # Center the logo at the top of the app UI                 logo_label.pack(anchor="n", pady=(10, 5))           g except Exception:               n # If logo fails to load, ignore and continue                pass
+
+    pass
 
         # --- Clock ---
         self.clock_label = tk.Label(left_frame, text="--:--:--", font=("TkDefaultFont", 12))
