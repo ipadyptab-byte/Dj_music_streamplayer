@@ -596,25 +596,35 @@ class MainWindow:
         self.prayer_label = tk.Label(prayer_frame, text="No prayer track selected")
         self.prayer_label.pack(anchor="w")
 
-        btn_prayer_select = tk.Button(prayer_frame, text="Select Prayer Track", command=self.select_prayer_track)
-        btn_prayer_select.pack(anchor="w", pady=5)
+        # Row with select/clear and add-time buttons so they remain visible
+        prayer_btn_row = tk.Frame(prayer_frame)
+        prayer_btn_row.pack(fill="x", pady=5)
 
-        btn_prayer_clear = tk.Button(prayer_frame, text="Delete Prayer Track", command=self.clear_prayer_track)
-        btn_prayer_clear.pack(anchor="w")
+        btn_prayer_select = tk.Button(prayer_btn_row, text="Select Prayer Track", command=self.select_prayer_track)
+        btn_prayer_select.pack(side="left")
 
+        btn_prayer_clear = tk.Button(prayer_btn_row, text="Delete Prayer Track", command=self.clear_prayer_track)
+        btn_prayer_clear.pack(side="left", padx=(5, 5))
+
+        btn_add_time = tk.Button(prayer_btn_row, text="Add Time", command=self.add_time)
+        btn_add_time.pack(side="left")
+
+        # List of configured prayer times with its own frame so it stays readable
         times_frame = tk.Frame(prayer_frame)
-        times_frame.pack(fill="x", pady=5)
+        times_frame.pack(fill="both", expand=True, pady=5)
 
         self.times_listbox = tk.Listbox(times_frame, height=5)
-        self.times_listbox.pack(side="left", fill="x", expand=True)
+        self.times_listbox.pack(side="left", fill="both", expand=True)
 
-        btns_frame = tk.Frame(times_frame)
-        btns_frame.pack(side="left", padx=5)
+        times_scroll = tk.Scrollbar(times_frame, orient="vertical", command=self.times_listbox.yview)
+        times_scroll.pack(side="right", fill="y")
+        self.times_listbox.configure(yscrollcommand=times_scroll.set)
 
-        btn_add_time = tk.Button(btns_frame, text="Add Time", command=self.add_time)
-        btn_add_time.pack(fill="x", pady=2)
+        btns_frame = tk.Frame(prayer_frame)
+        btns_frame.pack(anchor="w", pady=(0, 2))
+
         btn_remove_time = tk.Button(btns_frame, text="Remove Selected", command=self.remove_selected_time)
-        btn_remove_time.pack(fill="x", pady=2)
+        btn_remove_time.pack(side="left")
 
         # --- Log/output on the right ---
         log_frame = tk.LabelFrame(log_container, text="Log", padx=10, pady=10)
