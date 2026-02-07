@@ -207,7 +207,6 @@ class MainTrackPlayer:
             with self._lock:
                 if getattr(self, "_priority_proc", None) is proc:
                     self._priority_proc = None
-    defne
 
     def get_status(self) -> dict:
         """Return info about the current main track: path, playing flag, elapsed seconds.
