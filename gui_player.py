@@ -205,12 +205,16 @@ class MainTrackPlayer:
                 self._proc.terminate()
                 self._proc = None
         # Start ad as a tracked priority process
+        start_ts = time.monotonic()
         proc = self._start_ffplay(path, 0.0)
         with self._lock:
             self._priority_proc = proc
         try:
             proc.wait()
         finally:
+            elapsed = time.monotonic() - start_ts
+            # Simple debug print to help diagnose if ads are being cut short
+            print(f"[DEBUG] Ad playback finished, elapsed ~{elapsed:.1f}s for file: {path}")
             with self._lock:
                 if getattr(self, "_priority_proc", None) is proc:
                     self._priority_proc = None
