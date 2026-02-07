@@ -354,9 +354,13 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             continue
 
         if ad_file and os.path.exists(ad_file):
-            ui.log(f"Playing advertisement (interrupting main track): {os.path.basename(ad_file)}")
+            ui.log(
+                "Advertisement cycle: pausing main track for ad "
+                f"({os.path.basename(ad_file)})"
+            )
             # Interrupt the main track (if any), play the ad, then resume main
             state.main_player.interrupt_and_resume(ad_file)
+            ui.log("Advertisement finished, main track resumed (if it was playing before).")
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
@@ -382,20 +386,24 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
         for t in times:
             if t == current_hm and last_run.get(t) != today:
                 if os.path.exists(prayer_file):
-                    ui.log(f"Playing prayer for scheduled time {t}: {os.path.basename(prayer_file)}")
+                    ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
                     # Stop any currently playing advertisement (priority track)
+                    ui.log("Stopping any running advertisement for prayer.")
                     state.main_player.stop_priority()
                     # Mark that a prayer is in progress so ads do not play
                     with state.lock:
                         state.prayer_last_run[t] = today
                         state.in_prayer = True
                     try:
+                        ui.log("Pausing main track and starting prayer track.")
                         # Interrupt main track for higher-priority prayer and resume it afterwards
                         state.main_player.interrupt_and_resume(prayer_file)
+                        ui.log("Prayer track finished, resuming main track (if it was playing before).")
                     finally:
                         # Allow ads again after prayer finishes
                         with state.lock:
                             state.in_prayer = False
+                            ui.log("Prayer finished, advertisements allowed again.")
 
 
 # ---------------------------
