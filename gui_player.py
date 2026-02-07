@@ -57,7 +57,14 @@ class MainTrackPlayer:
         self._stop_reason: str | None = None
 
     def _start_ffplay(self, path: str, offset_sec: float) -> subprocess.Popen:
-        cmd = ["ffplay", "-nodisp", "-autoexit"]
+        """Start ffplay with consistent dynamic normalization so tracks have similar loudness."""
+        cmd = [
+            "ffplay",
+            "-nodisp",
+            "-autoexit",
+            "-af",
+            "dynaudnorm",  # dynamic audio normalization filter
+        ]
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
         cmd.append(path)
