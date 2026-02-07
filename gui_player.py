@@ -422,13 +422,20 @@ class MainWindow:
         self.state = state
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
 
+        # Main layout: left side for controls, right side for log
+        left_frame = tk.Frame(root)
+        left_frame.pack(side="left", fill="both", expand=True)
+
+        log_container = tk.Frame(root)
+        log_container.pack(side="right", fill="both", padx=(5, 10), pady=10)
+
         # --- Clock ---
-        self.clock_label = tk.Label(root, text="--:--:--", font=("TkDefaultFont", 12))
+        self.clock_label = tk.Label(left_frame, text="--:--:--", font=("TkDefaultFont", 12))
         self.clock_label.pack(anchor="ne", padx=10, pady=(5, 0))
         self._update_clock()
 
         # --- Search & play section ---
-        search_frame = tk.LabelFrame(root, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
+        search_frame = tk.LabelFrame(left_frame, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
         search_frame.pack(fill="both", padx=10, pady=5)
 
         self.search_var = tk.StringVar()
@@ -451,7 +458,7 @@ class MainWindow:
         btn_play_selected.pack(side="bottom", anchor="e", pady=(5, 0))
 
         # --- Main track controls ---
-        main_frame = tk.LabelFrame(root, text="Main Track", padx=10, pady=10)
+        main_frame = tk.LabelFrame(left_frame, text="Main Track", padx=10, pady=10)
         main_frame.pack(fill="x", padx=10, pady=5)
 
         self.main_track_label = tk.Label(main_frame, text="No main track")
@@ -473,7 +480,7 @@ class MainWindow:
         btn_main_stop.pack(side="left", padx=(0, 5))
 
         # --- Advertisement section ---
-        ad_frame = tk.LabelFrame(root, text="Advertisement Settings", padx=10, pady=10)
+        ad_frame = tk.LabelFrame(left_frame, text="Advertisement Settings", padx=10, pady=10)
         ad_frame.pack(fill="x", padx=10, pady=5)
 
         self.ad_label = tk.Label(ad_frame, text="No advertisement track selected")
@@ -496,7 +503,7 @@ class MainWindow:
         btn_apply_interval.pack(anchor="w")
 
         # --- Prayer section ---
-        prayer_frame = tk.LabelFrame(root, text="Prayer Settings", padx=10, pady=10)
+        prayer_frame = tk.LabelFrame(left_frame, text="Prayer Settings", padx=10, pady=10)
         prayer_frame.pack(fill="x", padx=10, pady=5)
 
         self.prayer_label = tk.Label(prayer_frame, text="No prayer track selected")
@@ -522,11 +529,11 @@ class MainWindow:
         btn_remove_time = tk.Button(btns_frame, text="Remove Selected", command=self.remove_selected_time)
         btn_remove_time.pack(fill="x", pady=2)
 
-        # --- Log/output ---
-        log_frame = tk.LabelFrame(root, text="Log", padx=10, pady=10)
-        log_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        # --- Log/output on the right ---
+        log_frame = tk.LabelFrame(log_container, text="Log", padx=10, pady=10)
+        log_frame.pack(fill="both", expand=True)
 
-        self.log_text = tk.Text(log_frame, height=8, state="disabled")
+        self.log_text = tk.Text(log_frame, height=20, state="disabled")
         self.log_text.pack(fill="both", expand=True)
 
         # Hook close event
