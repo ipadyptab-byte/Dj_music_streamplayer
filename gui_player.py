@@ -17,20 +17,23 @@ from main import UPLOAD_FOLDER, search_youtube, get_audio_url
 
 # ---------------------------
 # Low-level audio playback
-# ---------------------------
-
-def play_with_ffplay(path: str) -> None:
+# ----------</old_code><new_code>def play_with_ffplay(path: str) -> None:
     """Play an audio file using ffplay (part of ffmpeg).
 
     This is blocking, so it must be run in a background thread.
     """
+    # On Windows, hide the console window for ffplay so it runs silently in the background
+    creationflags = 0
+    if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+        creationflags = subprocess.CREATE_NO_WINDOW
+
     try:
         subprocess.run([
             "ffplay",
             "-nodisp",
             "-autoexit",
             path,
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
         messagebox.showerror(
             "ffplay not found",
@@ -57,7 +60,10 @@ class MainTrackPlayer:
         self._stop_reason: str | None = None
 
     def _start_ffplay(self, path: str, offset_sec: float) -> subprocess.Popen:
-        """Start ffplay with consistent dynamic normalization so tracks have similar loudness."""
+        """Start ffplay with consistent dynamic normalization so tracks have similar loudness.
+
+        On Windows, the ffplay process is created without a visible console window.
+        """
         cmd = [
             "ffplay",
             "-nodisp",
@@ -68,7 +74,17 @@ class MainTrackPlayer:
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
         cmd.append(path)
-        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        creationflags = 0
+        if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+            creationflags = subprocess.CREATE_NO_WINDOW
+
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
 
     def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
