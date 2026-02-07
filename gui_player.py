@@ -94,8 +94,7 @@ class MainTrackPlayer:
 
 
 
-
-def play_new(self, path: str) -> None:
+ def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
 
         Ensures that no priority track (ad/prayer) is playing at the same time.
@@ -107,7 +106,8 @@ def play_new(self, path: str) -> None:
             if self._proc and self._proc.poll() is None:
                 self._stop_reason = "stop"
                 self._proc.terminate()
-            self._proc = self._start_ffplay(path, 0.0)
+            # Main tracks keep normalization
+            self._proc = self._start_ffplay(path, 0.0, normalize=True)
             self._current_file = path
             self._offset_sec = 0.0
             self._start_monotonic = time.monotonic()
