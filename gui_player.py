@@ -398,9 +398,9 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
         if not ad_file or interval <= 0 or in_prayer:
             continue
 
-        # Only play advertisement if a main track is currently playing
+        # Only play advertisement if there is a main track selected (playing or paused)
         main_status = state.main_player.get_status()
-        if not main_status.get("is_playing"):
+        if not main_status.get("file"):
             continue
 
         if ad_file and os.path.exists(ad_file):
