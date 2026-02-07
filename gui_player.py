@@ -54,6 +54,7 @@ class MainTrackPlayer:
         self._current_file: str | None = None
         self._offset_sec: float = 0.0
         self._start_monotonic: float | None = None
+        self._stop_reason: str | None = None
 
     def _start_ffplay(self, path: str, offset_sec: float) -> subprocess.Popen:
         cmd = ["ffplay", "-nodisp", "-autoexit"]
@@ -67,11 +68,13 @@ class MainTrackPlayer:
         with self._lock:
             # Stop anything currently playing
             if self._proc and self._proc.poll() is None:
+                self._stop_reason = "stop"
                 self._proc.terminate()
             self._proc = self._start_ffplay(path, 0.0)
             self._current_file = path
             self._offset_sec = 0.0
             self._start_monotonic = time.monotonic()
+            self._stop_reason = None
 
     def _update_offset_locked(self) -> None:
         """Update the stored offset based on how long the current process has run."""
@@ -93,6 +96,7 @@ class MainTrackPlayer:
                 # Calculate how long the main track has already played
                 self._update_offset_locked()
                 try:
+                    self._stop_reason = "interrupt"
                     self._proc.terminate()
                 finally:
                     self._proc = None
@@ -113,12 +117,14 @@ class MainTrackPlayer:
                     self._current_file = main_to_resume
                     self._start_monotonic = time.monotonic()
                     self._offset_sec = resume_offset
+                    self._stop_reason = None
 
     def pause(self) -> None:
         """Pause the main track (can be resumed)."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
                 self._update_offset_locked()
+                self._stop_reason = "pause"
                 self._proc.terminate()
                 self._proc = None
 
@@ -126,11 +132,13 @@ class MainTrackPlayer:
         """Stop the main track and clear state (cannot be resumed)."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
+                self._stop_reason = "stop"
                 self._proc.terminate()
             self._proc = None
             self._current_file = None
             self._offset_sec = 0.0
             self._start_monotonic = None
+            self._stop_reason = None
 
     def resume(self) -> None:
         """Resume the main track if paused."""
@@ -138,6 +146,7 @@ class MainTrackPlayer:
             if self._current_file and (self._proc is None or self._proc.poll() is not None):
                 self._proc = self._start_ffplay(self._current_file, self._offset_sec)
                 self._start_monotonic = time.monotonic()
+                self._stop_reason = None
 
     def get_status(self) -> dict:
         """Return info about the current main track: path, playing flag, elapsed seconds.
@@ -150,15 +159,14 @@ class MainTrackPlayer:
             finished = False
             if self._proc and self._proc.poll() is not None:
                 # Process ended; if no explicit stop reason, treat as natural end
-                if getattr(self, "_stop_reason", None) is None and self._current_file is not None:
+                if self._stop_reason is None and self._current_file is not None:
                     finished = True
                 # Clear state regardless
                 self._proc = None
                 self._current_file = None
                 self._offset_sec = 0.0
                 self._start_monotonic = None
-                if hasattr(self, "_stop_reason"):
-                    self._stop_reason = None
+                self._stop_reason = None
 
             elapsed = self._offset_sec
             if self._proc and self._proc.poll() is None and self._start_monotonic is not None:
@@ -172,6 +180,8 @@ class MainTrackPlayer:
             }
 
 
+# ---------------------------
+# Scheduler state
 # ---------------------------
 # Scheduler state
 # ---------------------------
@@ -342,13 +352,26 @@ class MainWindow:
 
         # --- Search & play section ---
         search_frame = tk.LabelFrame(root, text="Search & Play (YouTube via yt-dlp)", padx=10, pady=10)
-        search_frame.pack(fill="x", padx=10, pady=5)
+        search_frame.pack(fill="both", padx=10, pady=5)
 
         self.search_var = tk.StringVar()
         entry_search = tk.Entry(search_frame, textvariable=self.search_var, width=40)
-        entry_search.pack(side="left", padx=(0, 5), fill="x", expand=True)
+        entry_search.pack(side="top", padx=(0, 5), pady=(0, 5), fill="x", expand=True)
         btn_search = tk.Button(search_frame, text="Search", command=self.search_and_play)
-        btn_search.pack(side="left")
+        btn_search.pack(side="top", anchor="e")
+
+        results_frame = tk.Frame(search_frame)
+        results_frame.pack(fill="both", expand=True, pady=(5, 0))
+
+        self.search_results_listbox = tk.Listbox(results_frame, height=6)
+        self.search_results_listbox.pack(side="left", fill="both", expand=True)
+
+        results_scroll = tk.Scrollbar(results_frame, orient="vertical", command=self.search_results_listbox.yview)
+        results_scroll.pack(side="right", fill="y")
+        self.search_results_listbox.configure(yscrollcommand=results_scroll.set)
+
+        btn_play_selected = tk.Button(search_frame, text="Play Selected", command=self.play_selected_search_result)
+        btn_play_selected.pack(side="bottom", anchor="e", pady=(5, 0))
 
         # --- Main track controls ---
         main_frame = tk.LabelFrame(root, text="Main Track", padx=10, pady=10)
@@ -690,35 +713,35 @@ class MainWindow:
             messagebox.showinfo("Search", "No results found.")
             return
 
-        # Build a simple selection dialog
-        dlg = tk.Toplevel(self.root)
-        dlg.title("Select Track")
-        dlg.geometry("500x300")
+        # Store results and show them in the UI listbox
+        with self.state.lock:
+            self.state.search_results = results
+            self.state.search_index = None
 
-        listbox = tk.Listbox(dlg)
-        listbox.pack(fill="both", expand=True, padx=10, pady=10)
-
+        self.search_results_listbox.delete(0, "end")
         for idx, item in enumerate(results):
             title = item.get("title", "(no title)")
-            listbox.insert("end", f"{idx + 1}. {title}")
+            self.search_results_listbox.insert("end", f"{idx + 1}. {title}")
 
-        def on_play() -> None:
-            sel = listbox.curselection()
-            if not sel:
+        if results:
+            self.search_results_listbox.selection_set(0)
+            self.search_results_listbox.activate(0)
+
+        self.log(f"Found {len(results)} result(s). Select one and click 'Play Selected'.")
+
+    def play_selected_search_result(self) -> None:
+        sel = self.search_results_listbox.curselection()
+        if not sel:
+            messagebox.showinfo("Play", "Please select a result to play.")
+            return
+        index = sel[0]
+        with self.state.lock:
+            if not self.state.search_results or index >= len(self.state.search_results):
+                messagebox.showerror("Error", "Selected result is no longer available.")
                 return
-            index = sel[0]
-            track = results[index]
-            # Remember this search result list and which item was chosen,
-            # so we can auto-play the next track when this one finishes.
-            with self.state.lock:
-                self.state.search_results = results
-                self.state.search_index = index
-            dlg.destroy()
-            self.play_search_result(track)
-
-        btn_frame = tk.Frame(dlg)
-        btn_frame.pack(fill="x", padx=10, pady=(0, 10))
-        tk.Button(btn_frame, text="Play", command=on_play).pack(side="right")
+            self.state.search_index = index
+            track = self.state.search_results[index]
+        self.play_search_result(track)
 
     def play_search_result(self, track: dict) -> None:
         url = track.get("url")
