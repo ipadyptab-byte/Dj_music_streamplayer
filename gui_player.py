@@ -64,9 +64,14 @@ class MainTrackPlayer:
         return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def play_new(self, path: str) -> None:
-        """Start playing a new main track from the beginning."""
+        """Start playing a new main track from the beginning.
+
+        Ensures that no priority track (ad/prayer) is playing at the same time.
+        """
+        # Make sure any priority track is stopped before starting main audio
+        self.stop_priority()
         with self._lock:
-            # Stop anything currently playing
+            # Stop anything currently playing as main
             if self._proc and self._proc.poll() is None:
                 self._stop_reason = "stop"
                 self._proc.terminate()
@@ -85,9 +90,17 @@ class MainTrackPlayer:
     def _play_priority_blocking(self, path: str) -> None:
         """Play a higher-priority track (ad or prayer) in a way that can be stopped.
 
-        This starts ffplay for the priority track, remembers the process, waits
-        for it to finish, and then clears the reference.
+        Before starting the priority track, ensure main is paused so only one
+        thing plays at a time.
         """
+        # Ensure main track is not playing concurrently
+        with self._lock:
+            if self._proc and self._proc.poll() is None:
+                self._update_offset_locked()
+                self._stop_reason = "interrupt"
+                self._proc.terminate()
+                self._proc = None
+        # Now start the priority track
         proc = self._start_ffplay(path, 0.0)
         with self._lock:
             self._priority_proc = proc
