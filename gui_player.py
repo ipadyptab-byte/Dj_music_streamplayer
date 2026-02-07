@@ -184,6 +184,31 @@ class MainTrackPlayer:
                 self._priority_proc.terminate()
             self._priority_proc = None
 
+    def play_ad_blocking(self, path: str) -> None:
+        """Play an advertisement, tracking its process so it can be stopped.
+
+        Pauses the main track, plays the ad, and leaves main paused.
+        The caller decides whether and when to resume main.
+        """
+        # Pause main track if it's playing
+        with self._lock:
+            if self._proc and self._proc.poll() is None:
+                self._update_offset_locked()
+                self._stop_reason = "interrupt"
+                self._proc.terminate()
+                self._proc = None
+        # Start ad as a tracked priority process
+        proc = self._start_ffplay(path, 0.0)
+        with self._lock:
+            self._priority_proc = proc
+        try:
+            proc.wait()
+        finally:
+            with self._lock:
+                if getattr(self, "_priority_proc", None) is proc:
+                    self._priority_proc = None
+    defne
+
     def get_status(self) -> dict:
         """Return info about the current main track: path, playing flag, elapsed seconds.
 
