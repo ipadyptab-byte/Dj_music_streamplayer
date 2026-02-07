@@ -82,6 +82,22 @@ class MainTrackPlayer:
             self._offset_sec += time.monotonic() - self._start_monotonic
             self._start_monotonic = time.monotonic()
 
+    def _play_priority_blocking(self, path: str) -> None:
+        """Play a higher-priority track (ad or prayer) in a way that can be stopped.
+
+        This starts ffplay for the priority track, remembers the process, waits
+        for it to finish, and then clears the reference.
+        """
+        proc = self._start_ffplay(path, 0.0)
+        with self._lock:
+            self._priority_proc = proc
+        try:
+            proc.wait()
+        finally:
+            with self._lock:
+                if self._priority_proc is proc:
+                    self._priority_proc = None
+
     def interrupt_and_resume(self, priority_path: str) -> None:
         """Pause the main track, play a higher-priority track, then resume.
 
@@ -105,7 +121,7 @@ class MainTrackPlayer:
 
         # Play the higher-priority track fully (blocking in this worker thread)
         if os.path.exists(priority_path):
-            play_with_ffplay(priority_path)
+            self._play_priority_blocking(priority_path)
 
         # Resume the main track from where it left off
         if main_to_resume:
@@ -147,6 +163,13 @@ class MainTrackPlayer:
                 self._proc = self._start_ffplay(self._current_file, self._offset_sec)
                 self._start_monotonic = time.monotonic()
                 self._stop_reason = None
+
+    def stop_priority(self) -> None:
+        """Stop any currently playing higher-priority track (ad or prayer)."""
+        with self._lock:
+            if hasattr(self, "_priority_proc") and self._priority_proc and self._priority_proc.poll() is None:
+                self._priority_proc.terminate()
+            self._priority_proc = None
 
     def get_status(self) -> dict:
         """Return info about the current main track: path, playing flag, elapsed seconds.
@@ -326,6 +349,8 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
             if t == current_hm and last_run.get(t) != today:
                 if os.path.exists(prayer_file):
                     ui.log(f"Playing prayer for scheduled time {t}: {os.path.basename(prayer_file)}")
+                    # Stop any currently playing advertisement (priority track)
+                    state.main_player.stop_priority()
                     # Mark that a prayer is in progress so ads do not play
                     with state.lock:
                         state.prayer_last_run[t] = today
