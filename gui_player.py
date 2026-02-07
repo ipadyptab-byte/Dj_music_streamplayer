@@ -92,9 +92,7 @@ class MainTrackPlayer:
             creationflags=creationflags,
         )
 
-
-
- def play_new(self, path: str) -> None:
+    def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
 
         Ensures that no priority track (ad/prayer) is playing at the same time.
