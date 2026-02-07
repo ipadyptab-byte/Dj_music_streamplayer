@@ -316,7 +316,10 @@ class SchedulerState:
 # ---------------------------
 
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
-    """Periodically play advertisement track at a fixed interval."""
+    """Periodically play advertisement track at a fixed interval.
+
+    Ensures that advertisements never overlap with prayer or main track.
+    """
     while state.running:
         time.sleep(1)
         with state.lock:
@@ -325,13 +328,25 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
             in_prayer = state.in_prayer
         if not ad_file or interval <= 0 or in_prayer:
             continue
-        # Sleep in chunks to allow quick shutdown
+        # Sleep in 1-second chunks so we can react quickly to prayer starting
         slept = 0
         while state.running and slept < interval:
             time.sleep(1)
             slept += 1
+            # If a prayer starts during the wait, abort this ad cycle
+            with state.lock:
+                if state.in_prayer or state.ad_file is None or state.ad_interval_sec <= 0:
+                    slept = 0
+                    break
         if not state.running:
             break
+        # Re-check conditions right before starting the ad
+        with state.lock:
+            ad_file = state.ad_file
+            in_prayer = state.in_prayer
+            interval = state.ad_interval_sec
+        if not ad_file or interval <= 0 or in_prayer:
+            continue
         if ad_file and os.path.exists(ad_file):
             ui.log(f"Playing advertisement (interrupting main track): {os.path.basename(ad_file)}")
             # Interrupt the main track (if any), play the ad, then resume main
