@@ -56,15 +56,24 @@ class MainTrackPlayer:
         self._start_monotonic: float | None = None
         self._stop_reason: str | None = None
 
-    def _start_ffplay(self, path: str, offset_sec: float) -> subprocess.Popen:
-        """Start ffplay with consistent dynamic normalization so tracks have similar loudness."""
+    def _start_ffplay(self, path: str, offset_sec: float, *, normalize: bool = True) -> subprocess.Popen:
+        """Start ffplay.
+
+        By default we apply dynamic normalization (dynaudnorm) so tracks have
+        similar loudness. For short advertisement jingles this filter has
+        sometimes caused early termination with certain files, so ads can
+        request normalize=False to play them as‑is.
+        """
         cmd = [
             "ffplay",
             "-nodisp",
             "-autoexit",
-            "-af",
-            "dynaudnorm",  # dynamic audio normalization filter
         ]
+        if normalize:
+            cmd += [
+                "-af",
+                "dynaudnorm",  # dynamic audio normalization filter
+            ]
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
         cmd.append(path)
@@ -107,8 +116,9 @@ class MainTrackPlayer:
                 self._stop_reason = "interrupt"
                 self._proc.terminate()
                 self._proc = None
-        # Now start the priority track
-        proc = self._start_ffplay(path, 0.0)
+        # Now start the priority track (ads play without normalization to avoid
+        # any interaction between dynaudnorm and short jingle files)
+        proc = self._start_ffplay(path, 0.0, normalize=False)
         with self._lock:
             self._priority_proc = proc
         try:
