@@ -80,18 +80,22 @@ class MainTrackPlayer:
             ]
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
-        cmd.append(path)         # On Windows, prevent an extra console window from opening for ffplay.       E creationflags = 0        if platform.system() == "Windows":
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)        return subprocess.Popen(
-            cmd,            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,            creationflags=creationflags,
+        cmd.append(path)
+        # On Windows, prevent an extra console window from opening for ffplay.
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        return subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=creationflags,
         )
 
 
 
 
-VNULL)
-
-    def play_new(self, path: str) -> None:
+def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
 
         Ensures that no priority track (ad/prayer) is playing at the same time.
