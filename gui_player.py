@@ -428,10 +428,17 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
             if t == current_hm and last_run.get(t) != today:
                 if os.path.exists(prayer_file):
                     ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
-                    # Stop any currently playing advertisement (priority track)
-                    ui.log("Stopping any running advertisement for prayer.")
-                    state.main_player.stop_priority()
-                    # Mark that a prayer is in progress so ads do not play
+
+                    # Wait for any currently playing advertisement to finish
+                    # so that ad tracks are never cut off.
+                    while True:
+                        with state.lock:
+                            priority_proc = getattr(state.main_player, "_priority_proc", None)
+                        if not priority_proc or priority_proc.poll() is not None:
+                            break
+                        time.sleep(0.5)
+
+                    # Mark that a prayer is in progress so new ads do not start
                     with state.lock:
                         state.prayer_last_run[t] = today
                         state.in_prayer = True
