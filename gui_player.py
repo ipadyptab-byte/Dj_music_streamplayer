@@ -383,10 +383,9 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 "Advertisement cycle: pausing main track for ad "
                 f"({os.path.basename(ad_file)})"
             )
-            # Pause main track explicitly, play ad, then resume main
-            state.main_player.pause()
+            # Play ad as a tracked priority process so it can be stopped by prayer
             try:
-                play_with_ffplay(ad_file)
+                state.main_player.play_ad_blocking(ad_file)
             finally:
                 # Only resume main if not in prayer anymore
                 with state.lock:
@@ -395,7 +394,7 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     ui.log("Advertisement finished, resuming main track.")
                     state.main_player.resume()
                 else:
-                    ui.log("Advertisement finished during prayer; main track remains paused.")
+                    ui.log("Advertisement interrupted by prayer; main track remains paused.")
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
