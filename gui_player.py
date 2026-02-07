@@ -439,13 +439,14 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 "Advertisement cycle: pausing main track for ad "
                 f"({os.path.basename(ad_file)})"
             )
-            # Play ad as a tracked priority process so it can be stopped by prayer             # Use the probed duration (if available) so we honour the full ad             # length even if ffplay exits early.            with state.lock:
-                ad_duration = state.ad_duration_sec            try:
-                state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)            finally:
-
-
-
-ly:
+            # Play ad as a tracked priority process so it can be stopped by prayer
+            # Use the probed duration (if available) so we honour the full ad
+            # length even if ffplay exits early.
+            with state.lock:
+                ad_duration = state.ad_duration_sec
+            try:
+                state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)
+            finally:
                 # Only resume main if not in prayer anymore
                 with state.lock:
                     in_prayer_now = state.in_prayer
