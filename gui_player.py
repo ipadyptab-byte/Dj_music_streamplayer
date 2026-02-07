@@ -25,12 +25,16 @@ def play_with_ffplay(path: str) -> None:
     This is blocking, so it must be run in a background thread.
     """
     try:
+        # On Windows, prevent a console window from popping up for ffplay.
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.run([
             "ffplay",
             "-nodisp",
             "-autoexit",
             path,
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
         messagebox.showerror(
             "ffplay not found",
@@ -76,8 +80,16 @@ class MainTrackPlayer:
             ]
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
-        cmd.append(path)
-        return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        cmd.append(path)         # On Windows, prevent an extra console window from opening for ffplay.       E creationflags = 0        if platform.system() == "Windows":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)        return subprocess.Popen(
+            cmd,            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,            creationflags=creationflags,
+        )
+
+
+
+
+VNULL)
 
     def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
