@@ -12,7 +12,7 @@ import json
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+from main import BASE_DIR, UPLOAD_FOLDER, search_youtube, get_audio_url
 
 
 # ---------------------------
@@ -316,9 +316,11 @@ class SchedulerState:
     def __init__(self) -> None:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Where to persist GUI settings between runs
+        # Where to persist GUI settings between runs.
+        # Use the same persistent BASE_DIR as main.py so settings survive
+        # PyInstaller one‑file extractions.
         self.settings_path = os.path.join(
-            os.path.dirname(__file__), "config", "gui_player_settings.json"
+            BASE_DIR, "config", "gui_player_settings.json"
         )
 
         self.ad_file: str | None = None
