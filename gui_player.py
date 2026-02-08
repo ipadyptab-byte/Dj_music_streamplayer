@@ -130,9 +130,9 @@ class MainTrackPlayer:
                 self._stop_reason = "interrupt"
                 self._proc.terminate()
                 self._proc = None
-        # Now start the priority track (ads play without normalization to avoid
-        # any interaction between dynaudnorm and short jingle files)
-        proc = self._start_ffplay(path, 0.0, normalize=False)
+        # Now start the priority track (ads and prayers also use normalization
+        # so overall loudness stays consistent with the main track)
+        proc = self._start_ffplay(path, 0.0, normalize=True)
         with self._lock:
             self._priority_proc = proc
         try:
@@ -233,9 +233,10 @@ class MainTrackPlayer:
                 self._stop_reason = "interrupt"
                 self._proc.terminate()
                 self._proc = None
-        # Start ad as a tracked priority process
+        # Start ad as a tracked priority process (with normalization so
+        # the advertisement loudness is consistent with other audio)
         start_ts = time.monotonic()
-        proc = self._start_ffplay(path, 0.0, normalize=False)
+        proc = self._start_ffplay(path, 0.0, normalize=True)
         with self._lock:
             self._priority_proc = proc
         try:
