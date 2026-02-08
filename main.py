@@ -7,15 +7,26 @@ import webbrowser
 from threading import Timer
 
 # ===============================
-# PyInstaller-safe base directory
+# Paths: resources vs. persistent data
 # ===============================
-if getattr(sys, 'frozen', False):
-    BASE_DIR = sys._MEIPASS
+# When frozen by PyInstaller, sys._MEIPASS points to a temporary
+# extraction directory that is recreated on every run. Anything
+# stored there is lost between launches, so we only use it for
+# read‑only bundled resources (static files).
+#
+# For user data that must persist between runs (uploads, settings),
+# we use a separate BASE_DIR that points to a stable location:
+#   • frozen  -> directory containing the executable
+#   • unfrozen -> directory containing this source file
+if getattr(sys, "frozen", False):
+    BASE_DIR = os.path.dirname(sys.executable)  # persistent, next to .exe
+    RESOURCE_DIR = sys._MEIPASS                # ephemeral, bundled assets
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    RESOURCE_DIR = BASE_DIR
 
-STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+STATIC_DIR = os.path.join(RESOURCE_DIR, "static")
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
