@@ -7,15 +7,20 @@ import webbrowser
 from threading import Timer
 
 # ===============================
-# PyInstaller-safe base directory
+# PyInstaller-safe base & data directories
 # ===============================
 if getattr(sys, 'frozen', False):
+    # For static files (HTML/CSS/JS) use the PyInstaller extraction dir
     BASE_DIR = sys._MEIPASS
+    # For user data (uploads, settings) use a stable, user-writable location
+    base_cfg_dir = os.getenv("APPDATA") or os.path.expanduser("~")
+    DATA_DIR = os.path.join(base_cfg_dir, "DeviJewellersPlayer")
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = BASE_DIR
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
