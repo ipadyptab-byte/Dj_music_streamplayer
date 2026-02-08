@@ -17,7 +17,9 @@ from main import UPLOAD_FOLDER, search_youtube, get_audio_url
 
 # ---------------------------
 # Low-level audio playback
-# ----------</old_code><new_code>def play_with_ffplay(path: str) -> None:
+# ---------------------------
+
+def play_with_ffplay(path: str) -> None:
     """Play an audio file using ffplay (part of ffmpeg).
 
     This is blocking, so it must be run in a background thread.
