@@ -273,10 +273,16 @@ class SchedulerState:
     def __init__(self) -> None:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Where to persist GUI settings between runs
-        self.settings_path = os.path.join(
-            os.path.dirname(__file__), "config", "gui_player_settings.json"
-        )
+        # Where to persist GUI settings between runs.
+        # Use a stable, user-writable location so settings survive
+        # PyInstaller one-file bundles and app restarts.
+        if os.name == "nt":
+            base_cfg_dir = os.getenv("APPDATA") or os.path.expanduser("~")
+            cfg_dir = os.path.join(base_cfg_dir, "DeviJewellersPlayer")
+        else:
+            cfg_dir = os.path.join(os.path.expanduser("~"), ".devi_jewellers_player")
+        os.makedirs(cfg_dir, exist_ok=True)
+        self.settings_path = os.path.join(cfg_dir, "gui_player_settings.json")
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
