@@ -8,6 +8,7 @@ import platform
 from datetime import datetime
 import random
 import json
+import sys
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -316,10 +317,20 @@ class SchedulerState:
     def __init__(self) -> None:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Where to persist GUI settings between runs
-        self.settings_path = os.path.join(
-            os.path.dirname(__file__), "config", "gui_player_settings.json"
-        )
+        # Where to persist GUI settings between runs.
+        #
+        # When running as a PyInstaller EXE, __file__ points into a
+        # temporary unpack directory that is recreated on each run, so
+        # we resolve a stable base directory differently in that case
+        # (next to the executable). For normal Python runs we keep the
+        # existing behaviour of using the source directory.
+        if getattr(sys, "frozen", False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        config_dir = os.path.join(base_dir, "config")
+        self.settings_path = os.path.join(config_dir, "gui_player_settings.json")
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
