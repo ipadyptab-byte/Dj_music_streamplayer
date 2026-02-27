@@ -531,6 +531,7 @@ class MainWindow:
     def __init__(self, root: tk.Tk, state: SchedulerState) -> None:
         self.root = root
         self.state = state
+        self._ui_thread_id = threading.get_ident()
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
 
         # Try to set window icon from a local file if available
@@ -755,29 +756,49 @@ class MainWindow:
 
         When a user picks a track from Search & Play, we remember the full
         result list and the index of the chosen track. When that track ends
-        naturally, this method advances to the next item in that same list
-        (if any) and plays it automatically.
+        naturally, this method advances to the next item in that same list.
+
+        If we reach the end of the list, we start again from a random track
+        so playback continues indefinitely.
         """
         with self.state.lock:
             if not self.state.search_results:
                 return
+
             if self.state.search_index is None:
-                return
-            next_index = self.state.search_index + 1
-            if next_index >= len(self.state.search_results):
-                # Reached the end of this search result list.
-                return
+                # If we don't know where we are in the list, start from a random item.
+                next_index = random.randrange(len(self.state.search_results))
+            else:
+                next_index = self.state.search_index + 1
+                if next_index >= len(self.state.search_results):
+                    # Reached the end of this search result list; start again randomly.
+                    next_index = random.randrange(len(self.state.search_results))
+
             track = self.state.search_results[next_index]
             self.state.search_index = next_index
+
         title = track.get("title", "(no title)")
         self.log(f"Auto-playing next track from Search & Play results: {title}")
         self.play_search_result(track)
 
-    def log(self, msg: str) -> None:
+    def _append_log_line(self, msg: str) -> None:
         self.log_text.configure(state="normal")
         self.log_text.insert("end", f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+
+    def log(self, msg: str) -> None:
+        if not self.root.winfo_exists():
+            return
+        # Tkinter widgets must only be touched from the UI thread.
+        if threading.get_ident() == self._ui_thread_id:
+            self._append_log_line(msg)
+        else:
+            try:
+                self.root.after(0, self._append_log_line, msg)
+            except Exception:
+                # If the app is shutting down, ignore log calls.
+                pass
 
     def select_ad_track(self) -> None:
         path = filedialog.askopenfilename(
