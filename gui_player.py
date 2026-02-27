@@ -8,6 +8,7 @@ import platform
 from datetime import datetime
 import random
 import json
+import sys
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -221,10 +222,9 @@ class MainTrackPlayer:
         Pauses the main track, plays the ad, and leaves main paused.
         The caller decides whether and when to resume main.
 
-        If expected_duration is provided, we will keep the main track paused
-        for at least that many seconds, even if ffplay exits early for some
-        reason. This guarantees that the "logical" ad length is honoured
-        before resuming the main player.
+        Advertisements are now played exactly as they are uploaded,
+        without any additional timing control beyond the natural
+        lifetime of the ffplay process.
         """
         # Pause main track if it's playing
         with self._lock:
@@ -233,30 +233,16 @@ class MainTrackPlayer:
                 self._stop_reason = "interrupt"
                 self._proc.terminate()
                 self._proc = None
-        # Start ad as a tracked priority process
+        # Start ad as a tracked priority process (no normalization)
         start_ts = time.monotonic()
         proc = self._start_ffplay(path, 0.0, normalize=False)
         with self._lock:
             self._priority_proc = proc
         try:
-            if expected_duration is not None and expected_duration > 0:
-                # Wait at least expected_duration seconds from start, even if
-                # ffplay exits early. This may introduce some silence, but it
-                # guarantees that the main track only resumes after the full
-                # configured advertisement length has elapsed.
-                while True:
-                    elapsed = time.monotonic() - start_ts
-                    if elapsed >= expected_duration:
-                        break
-                    if proc.poll() is not None:
-                        # ffplay ended early; just sleep the remaining time
-                        time.sleep(max(0.0, expected_duration - elapsed))
-                        break
-                    # Sleep in short chunks so we can notice process exit
-                    time.sleep(min(0.5, expected_duration - elapsed))
-            else:
-                # No known duration; fall back to the process lifetime
-                proc.wait()
+            # Always just wait for the actual ad playback to finish.
+            # We deliberately ignore expected_duration so the ad plays
+            # with its natural length and timing.
+            proc.wait()
         finally:
             total_elapsed = time.monotonic() - start_ts
             print(f"[DEBUG] Ad playback finished, elapsed ~{total_elapsed:.1f}s for file: {path}")
@@ -316,10 +302,20 @@ class SchedulerState:
     def __init__(self) -> None:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Where to persist GUI settings between runs
-        self.settings_path = os.path.join(
-            os.path.dirname(__file__), "config", "gui_player_settings.json"
-        )
+        # Where to persist GUI settings between runs.
+        #
+        # When running as a PyInstaller EXE, __file__ points into a
+        # temporary unpack directory that is recreated on each run, so
+        # we resolve a stable base directory differently in that case
+        # (next to the executable). For normal Python runs we keep the
+        # existing behaviour of using the source directory.
+        if getattr(sys, "frozen", False):
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        config_dir = os.path.join(base_dir, "config")
+        self.settings_path = os.path.join(config_dir, "gui_player_settings.json")
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
