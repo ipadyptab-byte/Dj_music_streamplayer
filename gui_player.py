@@ -338,10 +338,15 @@ class SchedulerState:
         self.main_history_index: int | None = None
 
         # Last Search & Play results and the index of the currently playing
-        # item within that result list. Used to auto-play the next track
-        # from the same search without asking the user again.
+        # item within that result list.
         self.search_results: list[dict] = []
         self.search_index: int | None = None
+
+        # Random play without repeats: this is a "bag" of remaining indexes
+        # to be played for the current search_results list. Once empty, we
+        # refill it with a new shuffle.
+        self.search_bag: list[int] = []
+        self.search_last_index: int | None = None
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -752,33 +757,38 @@ class MainWindow:
         self.root.after(1000, self._update_main_track_ui)
 
     def _play_next_from_search_results(self) -> None:
-        """Play the next track from the last Search & Play result list.
+        """Play a random next track from the last Search & Play result list.
 
-        When a user picks a track from Search & Play, we remember the full
-        result list and the index of the chosen track. When that track ends
-        naturally, this method advances to the next item in that same list.
-
-        If we reach the end of the list, we start again from a random track
-        so playback continues indefinitely.
+        Requirement:
+        - Random order
+        - No repeats until all tracks have played
+        - Then reshuffle and continue
         """
         with self.state.lock:
-            if not self.state.search_results:
+            results = self.state.search_results
+            if not results:
                 return
 
-            if self.state.search_index is None:
-                # If we don't know where we are in the list, start from a random item.
-                next_index = random.randrange(len(self.state.search_results))
-            else:
-                next_index = self.state.search_index + 1
-                if next_index >= len(self.state.search_results):
-                    # Reached the end of this search result list; start again randomly.
-                    next_index = random.randrange(len(self.state.search_results))
+            # Refill the bag when empty (new shuffle cycle).
+            if not self.state.search_bag:
+                self.state.search_bag = list(range(len(results)))
+                random.shuffle(self.state.search_bag)
 
-            track = self.state.search_results[next_index]
+                # Avoid immediate repeat across cycles if possible.
+                if (
+                    self.state.search_last_index is not None
+                    and len(self.state.search_bag) > 1
+                    and self.state.search_bag[0] == self.state.search_last_index
+                ):
+                    self.state.search_bag.append(self.state.search_bag.pop(0))
+
+            next_index = self.state.search_bag.pop(0)
             self.state.search_index = next_index
+            self.state.search_last_index = next_index
+            track = results[next_index]
 
         title = track.get("title", "(no title)")
-        self.log(f"Auto-playing next track from Search & Play results: {title}")
+        self.log(f"Auto-playing random track: {title}")
         self.play_search_result(track)
 
     def _append_log_line(self, msg: str) -> None:
@@ -996,6 +1006,9 @@ class MainWindow:
         with self.state.lock:
             self.state.search_results = results
             self.state.search_index = None
+            self.state.search_last_index = None
+            self.state.search_bag = list(range(len(results)))
+            random.shuffle(self.state.search_bag)
 
         self.search_results_listbox.delete(0, "end")
         for idx, item in enumerate(results):
@@ -1018,7 +1031,16 @@ class MainWindow:
             if not self.state.search_results or index >= len(self.state.search_results):
                 messagebox.showerror("Error", "Selected result is no longer available.")
                 return
+            # Mark this as current/last played.
             self.state.search_index = index
+            self.state.search_last_index = index
+
+            # Remove from the random bag so it won't repeat until the bag refills.
+            try:
+                self.state.search_bag.remove(index)
+            except ValueError:
+                pass
+
             track = self.state.search_results[index]
         self.play_search_result(track)
 
