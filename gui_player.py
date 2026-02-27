@@ -347,6 +347,7 @@ class SchedulerState:
         # refill it with a new shuffle.
         self.search_bag: list[int] = []
         self.search_last_index: int | None = None
+        self.search_rounds_completed: int = 0
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -604,6 +605,11 @@ class MainWindow:
         btn_play_selected = tk.Button(search_frame, text="Play Selected", command=self.play_selected_search_result)
         btn_play_selected.pack(side="bottom", anchor="e", pady=(5, 0))
 
+        self.search_rounds_label = tk.Label(search_frame, text="Rounds completed: 0")
+        self.search_rounds_label.pack(side="bottom", anchor="w", pady=(5, 0))
+
+        
+
         # --- Main track controls ---
         main_frame = tk.LabelFrame(left_frame, text="Main Track", padx=10, pady=10)
         main_frame.pack(fill="x", padx=10, pady=5)
@@ -763,7 +769,11 @@ class MainWindow:
         - Random order
         - No repeats until all tracks have played
         - Then reshuffle and continue
+
+        "Rounds completed" means: how many full cycles have finished where all
+        results were played once (without repeats).
         """
+        round_completed = False
         with self.state.lock:
             results = self.state.search_results
             if not results:
@@ -771,6 +781,11 @@ class MainWindow:
 
             # Refill the bag when empty (new shuffle cycle).
             if not self.state.search_bag:
+                # If we already played something, an empty bag means one full round finished.
+                if self.state.search_last_index is not None:
+                    self.state.search_rounds_completed += 1
+                    round_completed = True
+
                 self.state.search_bag = list(range(len(results)))
                 random.shuffle(self.state.search_bag)
 
@@ -785,7 +800,20 @@ class MainWindow:
             next_index = self.state.search_bag.pop(0)
             self.state.search_index = next_index
             self.state.search_last_index = next_index
+            rounds = self.state.search_rounds_completed
             track = results[next_index]
+
+        if round_completed:
+            self.log(f"Round completed: {rounds}")
+
+        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
+            if threading.get_ident() == self._ui_thread_id:
+                self.search_rounds_label.config(text=f"Rounds completed: {rounds}")
+            else:
+                try:
+                    self.root.after(0, self.search_rounds_label.config, {"text": f"Rounds completed: {rounds}"})
+                except Exception:
+                    pass
 
         title = track.get("title", "(no title)")
         self.log(f"Auto-playing random track: {title}")
@@ -1007,6 +1035,7 @@ class MainWindow:
             self.state.search_results = results
             self.state.search_index = None
             self.state.search_last_index = None
+            self.state.search_rounds_completed = 0
             self.state.search_bag = list(range(len(results)))
             random.shuffle(self.state.search_bag)
 
@@ -1020,6 +1049,12 @@ class MainWindow:
             self.search_results_listbox.activate(0)
 
         self.log(f"Found {len(results)} result(s). Select one and click 'Play Selected'.")
+        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
+            if threading.get_ident() == self._ui_thread_id:                self.search_rounds_label.config(text="Rounds completed: 0")
+            else:                try:
+                    self.root.after(0, self.search_rounds_label
+
+pleted: 0")
 
     def play_selected_search_result(self) -> None:
         sel = self.search_results_listbox.curselection()
