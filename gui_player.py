@@ -608,6 +608,7 @@ class MainWindow:
         self.search_rounds_label = tk.Label(search_frame, text="Rounds completed: 0")
         self.search_rounds_label.pack(side="bottom", anchor="w", pady=(5, 0))
 
+
         
 
         # --- Main track controls ---
@@ -1050,11 +1051,13 @@ class MainWindow:
 
         self.log(f"Found {len(results)} result(s). Select one and click 'Play Selected'.")
         if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
-            if threading.get_ident() == self._ui_thread_id:                self.search_rounds_label.config(text="Rounds completed: 0")
-            else:                try:
-                    self.root.after(0, self.search_rounds_label
-
-pleted: 0")
+            if threading.get_ident() == self._ui_thread_id:
+                self.search_rounds_label.config(text="Rounds completed: 0")
+            else:
+                try:
+                    self.root.after(0, self.search_rounds_label.config, {"text": "Rounds completed: 0"})
+                except Exception:
+                    pass
 
     def play_selected_search_result(self) -> None:
         sel = self.search_results_listbox.curselection()
