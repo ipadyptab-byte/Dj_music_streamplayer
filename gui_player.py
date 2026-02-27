@@ -608,6 +608,9 @@ class MainWindow:
         self.search_rounds_label = tk.Label(search_frame, text="Rounds completed: 0")
         self.search_rounds_label.pack(side="bottom", anchor="w", pady=(5, 0))
 
+        self.search_progress_label = tk.Label(search_frame, text="Tracks played: 0/0")
+        self.search_progress_label.pack(side="bottom", anchor="w")
+
 
         
 
@@ -807,14 +810,9 @@ class MainWindow:
         if round_completed:
             self.log(f"Round completed: {rounds}")
 
-        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
-            if threading.get_ident() == self._ui_thread_id:
-                self.search_rounds_label.config(text=f"Rounds completed: {rounds}")
-            else:
-                try:
-                    self.root.after(0, self.search_rounds_label.config, {"text": f"Rounds completed: {rounds}"})
-                except Exception:
-                    pass
+        total = len(results)
+        played = total - len(self.state.search_bag)
+        self._update_search_stats_ui(rounds=rounds, played=played, total=total)
 
         title = track.get("title", "(no title)")
         self.log(f"Auto-playing random track: {title}")
@@ -825,6 +823,25 @@ class MainWindow:
         self.log_text.insert("end", f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+
+    def _set_search_rounds_label(self, rounds: int) -> None:
+        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
+            self.search_rounds_label.config(text=f"Rounds completed: {rounds}")
+
+    def _set_search_progress_label(self, played: int, total: int) -> None:
+        if hasattr(self, "search_progress_label") and self.search_progress_label.winfo_exists():
+            self.search_progress_label.config(text=f"Tracks played: {played}/{total}")
+
+    def _update_search_stats_ui(self, *, rounds: int, played: int, total: int) -> None:
+        if threading.get_ident() == self._ui_thread_id:
+            self._set_search_rounds_label(rounds)
+            self._set_search_progress_label(played, total)
+        else:
+            try:
+                self.root.after(0, self._set_search_rounds_label, rounds)
+                self.root.after(0, self._set_search_progress_label, played, total)
+            except Exception:
+                pass
 
     def log(self, msg: str) -> None:
         if not self.root.winfo_exists():
@@ -1050,14 +1067,7 @@ class MainWindow:
             self.search_results_listbox.activate(0)
 
         self.log(f"Found {len(results)} result(s). Select one and click 'Play Selected'.")
-        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
-            if threading.get_ident() == self._ui_thread_id:
-                self.search_rounds_label.config(text="Rounds completed: 0")
-            else:
-                try:
-                    self.root.after(0, self.search_rounds_label.config, {"text": "Rounds completed: 0"})
-                except Exception:
-                    pass
+        self._update_search_stats_ui(rounds=0, played=0, total=len(results))
 
     def play_selected_search_result(self) -> None:
         sel = self.search_results_listbox.curselection()
@@ -1079,7 +1089,12 @@ class MainWindow:
             except ValueError:
                 pass
 
+            rounds = self.state.search_rounds_completed
+            total = len(self.state.search_results)
+            played = total - len(self.state.search_bag)
             track = self.state.search_results[index]
+
+        self._update_search_stats_ui(rounds=rounds, played=played, total=total)
         self.play_search_result(track)
 
     def play_search_result(self, track: dict) -> None:
