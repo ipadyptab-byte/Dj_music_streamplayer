@@ -338,10 +338,16 @@ class SchedulerState:
         self.main_history_index: int | None = None
 
         # Last Search & Play results and the index of the currently playing
-        # item within that result list. Used to auto-play the next track
-        # from the same search without asking the user again.
+        # item within that result list.
         self.search_results: list[dict] = []
         self.search_index: int | None = None
+
+        # Random play without repeats: this is a "bag" of remaining indexes
+        # to be played for the current search_results list. Once empty, we
+        # refill it with a new shuffle.
+        self.search_bag: list[int] = []
+        self.search_last_index: int | None = None
+        self.search_rounds_completed: int = 0
 
         # Flag to indicate that a prayer is currently playing so that
         # advertisements do not interrupt or overlap it.
@@ -531,6 +537,7 @@ class MainWindow:
     def __init__(self, root: tk.Tk, state: SchedulerState) -> None:
         self.root = root
         self.state = state
+        self._ui_thread_id = threading.get_ident()
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
 
         # Try to set window icon from a local file if available
@@ -597,6 +604,15 @@ class MainWindow:
 
         btn_play_selected = tk.Button(search_frame, text="Play Selected", command=self.play_selected_search_result)
         btn_play_selected.pack(side="bottom", anchor="e", pady=(5, 0))
+
+        self.search_rounds_label = tk.Label(search_frame, text="Rounds completed: 0")
+        self.search_rounds_label.pack(side="bottom", anchor="w", pady=(5, 0))
+
+        self.search_progress_label = tk.Label(search_frame, text="Tracks played: 0/0")
+        self.search_progress_label.pack(side="bottom", anchor="w")
+
+
+        
 
         # --- Main track controls ---
         main_frame = tk.LabelFrame(left_frame, text="Main Track", padx=10, pady=10)
@@ -751,33 +767,94 @@ class MainWindow:
         self.root.after(1000, self._update_main_track_ui)
 
     def _play_next_from_search_results(self) -> None:
-        """Play the next track from the last Search & Play result list.
+        """Play a random next track from the last Search & Play result list.
 
-        When a user picks a track from Search & Play, we remember the full
-        result list and the index of the chosen track. When that track ends
-        naturally, this method advances to the next item in that same list
-        (if any) and plays it automatically.
+        Requirement:
+        - Random order
+        - No repeats until all tracks have played
+        - Then reshuffle and continue
+
+        "Rounds completed" means: how many full cycles have finished where all
+        results were played once (without repeats).
         """
+        round_completed = False
         with self.state.lock:
-            if not self.state.search_results:
+            results = self.state.search_results
+            if not results:
                 return
-            if self.state.search_index is None:
-                return
-            next_index = self.state.search_index + 1
-            if next_index >= len(self.state.search_results):
-                # Reached the end of this search result list.
-                return
-            track = self.state.search_results[next_index]
+
+            # Refill the bag when empty (new shuffle cycle).
+            if not self.state.search_bag:
+                # If we already played something, an empty bag means one full round finished.
+                if self.state.search_last_index is not None:
+                    self.state.search_rounds_completed += 1
+                    round_completed = True
+
+                self.state.search_bag = list(range(len(results)))
+                random.shuffle(self.state.search_bag)
+
+                # Avoid immediate repeat across cycles if possible.
+                if (
+                    self.state.search_last_index is not None
+                    and len(self.state.search_bag) > 1
+                    and self.state.search_bag[0] == self.state.search_last_index
+                ):
+                    self.state.search_bag.append(self.state.search_bag.pop(0))
+
+            next_index = self.state.search_bag.pop(0)
             self.state.search_index = next_index
+            self.state.search_last_index = next_index
+            rounds = self.state.search_rounds_completed
+            track = results[next_index]
+
+        if round_completed:
+            self.log(f"Round completed: {rounds}")
+
+        total = len(results)
+        played = total - len(self.state.search_bag)
+        self._update_search_stats_ui(rounds=rounds, played=played, total=total)
+
         title = track.get("title", "(no title)")
-        self.log(f"Auto-playing next track from Search & Play results: {title}")
+        self.log(f"Auto-playing random track: {title}")
         self.play_search_result(track)
 
-    def log(self, msg: str) -> None:
+    def _append_log_line(self, msg: str) -> None:
         self.log_text.configure(state="normal")
         self.log_text.insert("end", f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+
+    def _set_search_rounds_label(self, rounds: int) -> None:
+        if hasattr(self, "search_rounds_label") and self.search_rounds_label.winfo_exists():
+            self.search_rounds_label.config(text=f"Rounds completed: {rounds}")
+
+    def _set_search_progress_label(self, played: int, total: int) -> None:
+        if hasattr(self, "search_progress_label") and self.search_progress_label.winfo_exists():
+            self.search_progress_label.config(text=f"Tracks played: {played}/{total}")
+
+    def _update_search_stats_ui(self, *, rounds: int, played: int, total: int) -> None:
+        if threading.get_ident() == self._ui_thread_id:
+            self._set_search_rounds_label(rounds)
+            self._set_search_progress_label(played, total)
+        else:
+            try:
+                self.root.after(0, self._set_search_rounds_label, rounds)
+                self.root.after(0, self._set_search_progress_label, played, total)
+            except Exception:
+                pass
+
+    def log(self, msg: str) -> None:
+        if not self.root.winfo_exists():
+            return
+        # Tkinter widgets must only be touched from the UI thread.
+        if threading.get_ident() == self._ui_thread_id:
+            self._append_log_line(msg)
+        else:
+            try:
+                self.root.after(0, self._append_log_line, msg)
+            except Exception:
+                # If the app is shutting down, ignore log calls.
+                pass
 
     def select_ad_track(self) -> None:
         path = filedialog.askopenfilename(
@@ -975,6 +1052,10 @@ class MainWindow:
         with self.state.lock:
             self.state.search_results = results
             self.state.search_index = None
+            self.state.search_last_index = None
+            self.state.search_rounds_completed = 0
+            self.state.search_bag = list(range(len(results)))
+            random.shuffle(self.state.search_bag)
 
         self.search_results_listbox.delete(0, "end")
         for idx, item in enumerate(results):
@@ -986,6 +1067,7 @@ class MainWindow:
             self.search_results_listbox.activate(0)
 
         self.log(f"Found {len(results)} result(s). Select one and click 'Play Selected'.")
+        self._update_search_stats_ui(rounds=0, played=0, total=len(results))
 
     def play_selected_search_result(self) -> None:
         sel = self.search_results_listbox.curselection()
@@ -997,8 +1079,22 @@ class MainWindow:
             if not self.state.search_results or index >= len(self.state.search_results):
                 messagebox.showerror("Error", "Selected result is no longer available.")
                 return
+            # Mark this as current/last played.
             self.state.search_index = index
+            self.state.search_last_index = index
+
+            # Remove from the random bag so it won't repeat until the bag refills.
+            try:
+                self.state.search_bag.remove(index)
+            except ValueError:
+                pass
+
+            rounds = self.state.search_rounds_completed
+            total = len(self.state.search_results)
+            played = total - len(self.state.search_bag)
             track = self.state.search_results[index]
+
+        self._update_search_stats_ui(rounds=rounds, played=played, total=total)
         self.play_search_result(track)
 
     def play_search_result(self, track: dict) -> None:
