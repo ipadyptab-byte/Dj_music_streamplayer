@@ -4,6 +4,7 @@ import yt_dlp
 import os
 import sys
 import webbrowser
+import shutil
 from threading import Timer
 
 # ===============================
@@ -32,14 +33,64 @@ def open_browser():
 # ===============================
 # Helper functions
 # ===============================
+
+_YTDLP_ENV_CHECKED = False
+_YTDLP_MISSING_JS_RUNTIME_WARNED = False
+
+
+def _configure_ytdlp_opts(base_opts: dict) -> dict:
+    """Augment yt-dlp options with JS runtime settings when possible."""
+    global _YTDLP_ENV_CHECKED, _YTDLP_MISSING_JS_RUNTIME_WARNED
+
+    if not _YTDLP_ENV_CHECKED:
+        _YTDLP_ENV_CHECKED = True
+
+        # yt-dlp needs an external JS runtime for full YouTube support.
+        # Deno is enabled by default; if it's missing we can fall back to other
+        # runtimes if the user has them installed.
+        deno = shutil.which('deno')
+        node = shutil.which('node')
+        bun = shutil.which('bun')
+        qjs = shutil.which('qjs') or shutil.which('quickjs')
+
+        if not any([deno, node, bun, qjs]) and not _YTDLP_MISSING_JS_RUNTIME_WARNED:
+            _YTDLP_MISSING_JS_RUNTIME_WARNED = True
+            print(
+                "\n[yt-dlp setup] No supported JavaScript runtime found. "
+                "YouTube extraction may fail (HTTP 400 / Precondition check failed).\n"
+                "Install one of: deno (recommended), node>=20, bun, or quickjs.\n"
+                "See: https://github.com/yt-dlp/yt-dlp/wiki/EJS\n",
+                flush=True,
+            )
+
+    # Prefer deno when available (default behavior; no option needed)
+    if shutil.which('deno'):
+        # Optional: allow EJS script deps to be fetched automatically via npm.
+        # This helps when the EJS scripts are not bundled with the install.
+        base_opts.setdefault('remote_components', ['ejs:npm'])
+        return base_opts
+
+    # If deno isn't installed, try other runtimes.
+    for runtime, exe in (
+        ('node', 'node'),
+        ('bun', 'bun'),
+        ('quickjs', 'qjs'),
+    ):
+        if shutil.which(exe):
+            base_opts.setdefault('js_runtimes', [runtime])
+            return base_opts
+
+    return base_opts
+
+
 def search_youtube(query):
-    ydl_opts = {
+    ydl_opts = _configure_ytdlp_opts({
         'format': 'bestaudio/best',
         'noplaylist': True,
         'quiet': True,
         'extract_flat': True,
         'no_warnings': True,
-    }
+    })
     # Request at least 30 search results (YouTube search is limited by yt_dlp;
     # if fewer are available, you'll simply get as many as YouTube returns).
     max_results = 30
@@ -70,12 +121,13 @@ def get_audio_url(video_url):
     UPLOAD_FOLDER and serve it via /api/uploads/...
     """
     # Prefer Python yt_dlp library to download
-    ydl_opts = {
+    ydl_opts = _configure_ytdlp_opts({
         'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
+        'no_warnings': True,
         'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)

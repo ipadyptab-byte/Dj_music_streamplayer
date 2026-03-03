@@ -5,5 +5,5 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1.2",
-    "yt-dlp>=2025.12.8",
+    "yt-dlp[default]>=2025.12.8",
 ]
