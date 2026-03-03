@@ -76,17 +76,44 @@ def get_audio_url(video_url):
         'noplaylist': True,
         'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
     }
+
+    def _resolve_downloaded_basename(video_id: str | None) -> str | None:
+        if not video_id:
+            return None
+        # Try to find an on-disk file matching <id>.* (newest wins).
+        try:
+            candidates = [
+                os.path.join(UPLOAD_FOLDER, f)
+                for f in os.listdir(UPLOAD_FOLDER)
+                if f.startswith(f"{video_id}.")
+            ]
+            candidates = [p for p in candidates if os.path.isfile(p)]
+            if not candidates:
+                return None
+            candidates.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            return os.path.basename(candidates[0])
+        except Exception:
+            return None
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
+
+            # yt-dlp can yield the final output path in different places.
+            # Prefer the post-download filepath if present.
             video_id = info.get('id')
-            ext = info.get('ext', 'm4a')
-            if video_id:
-                filename = f"{video_id}.{ext}"
-                local_url = f"/api/uploads/{filename}"
-                return local_url
-            else:
-                print('yt_dlp: missing video id after download')
+            filepath = None
+            if isinstance(info.get('requested_downloads'), list) and info['requested_downloads']:
+                filepath = info['requested_downloads'][0].get('filepath')
+
+            if filepath and os.path.exists(filepath):
+                return f"/api/uploads/{os.path.basename(filepath)}"
+
+            basename = _resolve_downloaded_basename(video_id)
+            if basename:
+                return f"/api/uploads/{basename}"
+
+            print('yt_dlp: download succeeded but output file could not be resolved')
     except Exception as e:
         print('Python yt_dlp download failed:', e)
 
@@ -98,12 +125,14 @@ def get_audio_url(video_url):
             print('yt-dlp executable not found on PATH')
             return None
 
-        # Download to our UPLOAD_FOLDER using yt-dlp CLI
+        # Use yt-dlp's printing to reliably capture the final filepath.
         out_tmpl = os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s')
         result = subprocess.run(
             [
                 ytdlp_path,
                 '-f', 'bestaudio/best',
+                '--no-playlist',
+                '--print', 'after_move:filepath',
                 '-o', out_tmpl,
                 video_url,
             ],
@@ -114,9 +143,11 @@ def get_audio_url(video_url):
             print('yt-dlp executable download failed:', result.stderr)
             return None
 
-        # At this point yt-dlp CLI has downloaded the file to UPLOAD_FOLDER,
-        # but we don't know the exact name without extra probing.
-        print('yt-dlp CLI download completed, but filename not resolved in code.')
+        downloaded_path = (result.stdout or '').strip().splitlines()[-1] if (result.stdout or '').strip() else ''
+        if downloaded_path and os.path.exists(downloaded_path):
+            return f"/api/uploads/{os.path.basename(downloaded_path)}"
+
+        print('yt-dlp CLI download completed, but output file could not be resolved')
         return None
     except Exception as e:
         print('yt-dlp executable fallback failed:', e)
