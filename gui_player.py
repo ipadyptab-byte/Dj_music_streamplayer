@@ -13,7 +13,7 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+from main import UPLOAD_FOLDER, CONFIG_DIR, search_youtube, get_audio_url
 
 
 # ---------------------------
@@ -304,18 +304,9 @@ class SchedulerState:
 
         # Where to persist GUI settings between runs.
         #
-        # When running as a PyInstaller EXE, __file__ points into a
-        # temporary unpack directory that is recreated on each run, so
-        # we resolve a stable base directory differently in that case
-        # (next to the executable). For normal Python runs we keep the
-        # existing behaviour of using the source directory.
-        if getattr(sys, "frozen", False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-
-        config_dir = os.path.join(base_dir, "config")
-        self.settings_path = os.path.join(config_dir, "gui_player_settings.json")
+        # Use the shared, writable CONFIG_DIR from main.py. This avoids trying
+        # to write into Program Files when the app is installed system-wide.
+        self.settings_path = os.path.join(CONFIG_DIR, "gui_player_settings.json")
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180

@@ -4,19 +4,44 @@ import yt_dlp
 import os
 import sys
 import webbrowser
+import platform
 from threading import Timer
+
+APP_NAME = "Devi Jewellers Player"
 
 # ===============================
 # PyInstaller-safe base directory
 # ===============================
+# BASE_DIR is the read-only location for bundled resources (static files).
+# When installed under Program Files, this path is not writable.
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
+
+def get_data_dir() -> str:
+    """Return a per-user, writable directory for app data."""
+    if platform.system() == "Windows":
+        base = os.getenv("LOCALAPPDATA") or os.getenv("APPDATA")
+        if base:
+            return os.path.join(base, APP_NAME)
+    return os.path.join(os.path.expanduser("~"), f".{APP_NAME}")
+
+
+# DATA_DIR is writable; store uploads/config there when running as an EXE.
+if getattr(sys, 'frozen', False):
+    DATA_DIR = get_data_dir()
+else:
+    # Keep local dev behaviour: store uploads/config next to the source.
+    DATA_DIR = BASE_DIR
+
+CONFIG_DIR = os.path.join(DATA_DIR, 'config')
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
+
+os.makedirs(CONFIG_DIR, exist_ok=True)
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
