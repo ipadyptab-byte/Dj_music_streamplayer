@@ -11,9 +11,13 @@ import json
 import sys
 
 def get_binary_path(binary_name: str) -> str:
+    binary_name_ext = binary_name + (".exe" if platform.system() == "Windows" else "")
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
-        return os.path.join(exe_dir, binary_name + (".exe" if platform.system() == "Windows" else ""))
+        exe_path = os.path.join(exe_dir, binary_name_ext)
+        if os.path.exists(exe_path):
+            return exe_path
+    # Fallback to just the command name (relies on system PATH)
     return binary_name
 
 # --- PyInstaller Bundle Path Fix ---
@@ -743,6 +747,12 @@ class MainWindow:
 
         # Periodically update main track timing display
         self._update_main_track_ui()
+        
+        # Log binary paths for debugging
+        self.log(f"Executable directory: {os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else 'Not frozen'}")
+        self.log(f"Resolved ffplay path: {get_binary_path('ffplay')}")
+        self.log(f"Resolved ffprobe path: {get_binary_path('ffprobe')}")
+
 
     # ----- UI actions -----
 
