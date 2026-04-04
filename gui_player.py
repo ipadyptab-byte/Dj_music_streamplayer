@@ -588,7 +588,7 @@ class MainWindow:
                 w = self._logo_img.width()
                 h = self._logo_img.height()
                 scale_factor = 1
-                while w // scale_factor > 400 or h // scale_factor > 100:
+                while w // scale_factor > 250 or h // scale_factor > 60:
                     scale_factor += 1
                 
                 if scale_factor > 1:
@@ -619,7 +619,7 @@ class MainWindow:
         results_frame = tk.Frame(search_frame)
         results_frame.pack(fill="both", expand=True, pady=(5, 0))
 
-        self.search_results_listbox = tk.Listbox(results_frame, height=6)
+        self.search_results_listbox = tk.Listbox(results_frame, height=4)
         self.search_results_listbox.pack(side="left", fill="both", expand=True)
 
         results_scroll = tk.Scrollbar(results_frame, orient="vertical", command=self.search_results_listbox.yview)
@@ -657,9 +657,13 @@ class MainWindow:
         btn_main_stop = tk.Button(controls_frame, text="Stop", command=self.main_stop)
         btn_main_stop.pack(side="left", padx=(0, 5))
 
+        # Container for bottom settings to save vertical space
+        bottom_settings_frame = tk.Frame(left_frame)
+        bottom_settings_frame.pack(fill="both", expand=True, padx=5, pady=0)
+
         # --- Advertisement section ---
-        ad_frame = tk.LabelFrame(left_frame, text="Advertisement Settings", padx=10, pady=10)
-        ad_frame.pack(fill="x", padx=10, pady=5)
+        ad_frame = tk.LabelFrame(bottom_settings_frame, text="Advertisement Settings", padx=10, pady=10)
+        ad_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         self.ad_label = tk.Label(ad_frame, text="No advertisement track selected")
         self.ad_label.pack(anchor="w")
@@ -681,8 +685,8 @@ class MainWindow:
         btn_apply_interval.pack(anchor="w")
 
         # --- Prayer section ---
-        prayer_frame = tk.LabelFrame(left_frame, text="Prayer Settings", padx=10, pady=10)
-        prayer_frame.pack(fill="x", padx=10, pady=5)
+        prayer_frame = tk.LabelFrame(bottom_settings_frame, text="Prayer Settings", padx=10, pady=10)
+        prayer_frame.pack(side="right", fill="both", expand=True, padx=5, pady=5)
 
         self.prayer_label = tk.Label(prayer_frame, text="No prayer track selected")
         self.prayer_label.pack(anchor="w")
@@ -706,14 +710,14 @@ class MainWindow:
         times_frame = tk.Frame(prayer_frame)
         times_frame.pack(fill="x", pady=5)
 
-        self.times_listbox = tk.Listbox(times_frame, height=5)
+        self.times_listbox = tk.Listbox(times_frame, height=3)
         self.times_listbox.pack(side="left", fill="x", expand=True)
 
         # --- Log/output on the right ---
         log_frame = tk.LabelFrame(log_container, text="Log", padx=10, pady=10)
         log_frame.pack(fill="both", expand=True)
 
-        self.log_text = tk.Text(log_frame, height=20, state="disabled")
+        self.log_text = tk.Text(log_frame, height=15, state="disabled")
         self.log_text.pack(fill="both", expand=True)
 
         # Hook close event
