@@ -332,6 +332,8 @@ class SchedulerState:
 
         config_dir = os.path.join(base_dir, "config")
         self.settings_path = os.path.join(config_dir, "gui_player_settings.json")
+        self.persistent_audio_dir = os.path.join(base_dir, "stored_audio")
+        os.makedirs(self.persistent_audio_dir, exist_ok=True)
 
         self.ad_file: str | None = None
         self.ad_interval_sec: int = 180
@@ -905,7 +907,7 @@ class MainWindow:
         if not path:
             return
         try:
-            dest = os.path.join(UPLOAD_FOLDER, os.path.basename(path))
+            dest = os.path.join(self.state.persistent_audio_dir, os.path.basename(path))
             shutil.copy2(path, dest)
 
             # Probe duration using ffprobe so we know how long to keep main paused
@@ -982,7 +984,7 @@ class MainWindow:
         if not path:
             return
         try:
-            dest = os.path.join(UPLOAD_FOLDER, os.path.basename(path))
+            dest = os.path.join(self.state.persistent_audio_dir, os.path.basename(path))
             shutil.copy2(path, dest)
             with self.state.lock:
                 self.state.prayer_file = dest
