@@ -10,7 +10,14 @@ import random
 import json
 import sys
 
+def get_binary_path(binary_name: str) -> str:
+    """Return the absolute path to the binary if running in PyInstaller, else just the name."""
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, binary_name + (".exe" if platform.system() == "Windows" else ""))
+    return binary_name
+
 # --- PyInstaller Bundle Path Fix ---
+
 # When running as a compiled PyInstaller EXE, binaries (ffplay, ffmpeg) are extracted
 # to a temporary folder (_MEIPASS). We add this folder to the system PATH so 
 # subprocess and yt-dlp can find them automatically without modifying the rest of the code.
@@ -39,7 +46,7 @@ def play_with_ffplay(path: str) -> None:
         if platform.system() == "Windows":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         subprocess.run([
-            "ffplay",
+            get_binary_path("ffplay"),
             "-nodisp",
             "-autoexit",
             path,
@@ -77,7 +84,7 @@ class MainTrackPlayer:
         request normalize=False to play them as‑is.
         """
         cmd = [
-            "ffplay",
+            get_binary_path("ffplay"),
             "-nodisp",
             "-autoexit",
         ]
@@ -905,7 +912,7 @@ class MainWindow:
             try:
                 import subprocess, json as _json
                 cmd = [
-                    "ffprobe",
+                    get_binary_path("ffprobe"),
                     "-v",
                     "error",
                     "-show_entries",
