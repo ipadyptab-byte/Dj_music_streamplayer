@@ -11,6 +11,12 @@ echo.
 echo ==============================================
 echo Cleaning up corrupted build files...
 echo ==============================================
+
+:: Gracefully try to close the running app so we can overwrite it
+taskkill /IM MusicSchedulerPlayer.exe /F 2>nul
+:: Wait 2 seconds for the process to fully close
+timeout /t 2 /nobreak >nul
+
 rmdir /s /q build
 rmdir /s /q dist
 
