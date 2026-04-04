@@ -12,27 +12,14 @@ import sys
 
 def get_binary_path(binary_name: str) -> str:
     binary_name_ext = binary_name + (".exe" if platform.system() == "Windows" else "")
-    
-    # 1. Check current working directory (where the bat file ran or user double-clicked)
-    cwd_path = os.path.join(os.getcwd(), binary_name_ext)
-    if os.path.exists(cwd_path):
-        return cwd_path
-        
-    # 2. Check exactly where the .exe lives
-    if getattr(sys, "frozen", False):
-        exe_dir = os.path.dirname(sys.executable)
-        exe_path = os.path.join(exe_dir, binary_name_ext)
-        if os.path.exists(exe_path):
-            return exe_path
-            
-    # 3. Fallback to system PATH
     return binary_name_ext
 
 # --- PyInstaller Bundle Path Fix ---
 if getattr(sys, "frozen", False):
+    # This is the ONE TRUE WAY to get the directory of the .exe in PyInstaller onefile mode
     exe_dir = os.path.dirname(sys.executable)
-    cwd_dir = os.getcwd()
-    os.environ["PATH"] = cwd_dir + os.pathsep + exe_dir + os.pathsep + os.environ.get("PATH", "")
+    # Inject it at the very front of the system PATH
+    os.environ["PATH"] = exe_dir + os.pathsep + os.environ.get("PATH", "")
 # -----------------------------------
 
 import tkinter as tk
@@ -62,8 +49,8 @@ def play_with_ffplay(path: str) -> None:
             path,
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
-        bin_path = get_binary_path("ffplay")
-        exists = os.path.exists(bin_path)
+        bin_path = "ffplay.exe"
+        exists = shutil.which("ffplay.exe") is not None
         raise RuntimeError(f"Could not launch ffplay.\nTried path: {bin_path}\nFile exists: {exists}\nAre you running the EXE or the Python script?")
 
 
@@ -117,8 +104,8 @@ class MainTrackPlayer:
                 creationflags=creationflags,
             )
         except FileNotFoundError:
-            bin_path = get_binary_path("ffplay")
-            exists = os.path.exists(bin_path)
+            bin_path = "ffplay.exe"
+            exists = shutil.which("ffplay.exe") is not None
             raise RuntimeError(f"Could not launch ffplay.\nTried path: {bin_path}\nFile exists: {exists}\nAre you running the EXE or the Python script?")
 
     def play_new(self, path: str) -> None:
@@ -759,8 +746,8 @@ class MainWindow:
         
         # Log binary paths for debugging
         self.log(f"Executable directory: {os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else 'Not frozen'}")
-        self.log(f"Resolved ffplay path: {get_binary_path('ffplay')}")
-        self.log(f"Resolved ffprobe path: {get_binary_path('ffprobe')}")
+        self.log(f"Resolved ffplay via shutil.which: {shutil.which('ffplay.exe')}")
+        self.log(f"Resolved ffprobe via shutil.which: {shutil.which('ffprobe.exe')}")
 
 
     # ----- UI actions -----
