@@ -547,16 +547,19 @@ class MainWindow:
         self.root.title("Headless Music Scheduler (Ad + Prayer)")
 
         # Try to set window icon from a local file if available
-        # Place a suitable .ico or .png file at static/app_icon.ico or static/app_icon.png
+        user_defined_path = r"C:\Users\Gusts\Pictures\icon.png"
         icon_path_ico = os.path.join(os.path.dirname(__file__), "static", "app_icon.ico")
         icon_path_png = os.path.join(os.path.dirname(__file__), "static", "app_icon.png")
         try:
-            if os.path.exists(icon_path_ico):
+            if os.path.exists(user_defined_path):
+                icon_img = tk.PhotoImage(file=user_defined_path)
+                self.root.iconphoto(True, icon_img)
+                self._icon_img = icon_img
+            elif os.path.exists(icon_path_ico):
                 self.root.iconbitmap(icon_path_ico)
             elif os.path.exists(icon_path_png):
                 icon_img = tk.PhotoImage(file=icon_path_png)
                 self.root.iconphoto(True, icon_img)
-                # Keep a reference so it is not garbage-collected
                 self._icon_img = icon_img
         except Exception:
             # If icon loading fails, continue without crashing
@@ -570,17 +573,19 @@ class MainWindow:
         log_container.pack(side="right", fill="both", padx=(5, 10), pady=10)
 
         # --- Logo at the top ---
-        # Place your logo image (e.g. the Devi Jewellers banner) at static/logo.png
         logo_path = os.path.join(os.path.dirname(__file__), "static", "logo.png")
         self._logo_img = None
-        if os.path.exists(logo_path):
+        
+        # Try user-requested absolute path first, fallback to static/logo.png
+        target_logo = r"C:\Users\Gusts\Pictures\icon.png" if os.path.exists(r"C:\Users\Gusts\Pictures\icon.png") else logo_path
+        
+        if os.path.exists(target_logo):
             try:
-                self._logo_img = tk.PhotoImage(file=logo_path)
+                self._logo_img = tk.PhotoImage(file=target_logo)
                 logo_label = tk.Label(left_frame, image=self._logo_img)
                 # Center the logo at the top of the app UI
                 logo_label.pack(anchor="n", pady=(10, 5))
             except Exception:
-                # If logo fails to load, ignore and continue
                 pass
 
         # --- Clock ---
