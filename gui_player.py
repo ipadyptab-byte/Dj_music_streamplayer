@@ -37,10 +37,9 @@ def play_with_ffplay(path: str) -> None:
             path,
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
-        messagebox.showerror(
-            "ffplay not found",
+        raise RuntimeError(
             "ffplay (from ffmpeg) is not installed or not on PATH.\n"
-            "Please install ffmpeg and restart the application.",
+            "Please install ffmpeg and restart the application."
         )
 
 
@@ -86,12 +85,15 @@ class MainTrackPlayer:
         creationflags = 0
         if platform.system() == "Windows":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        return subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=creationflags,
-        )
+        try:
+            return subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=creationflags,
+            )
+        except FileNotFoundError:
+            raise RuntimeError("ffplay (from ffmpeg) is not installed or not on PATH.")
 
     def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
@@ -295,8 +297,6 @@ class MainTrackPlayer:
 # ---------------------------
 # Scheduler state
 # ---------------------------
-# Scheduler state
-# ---------------------------
 
 class SchedulerState:
     def __init__(self) -> None:
@@ -404,8 +404,6 @@ class SchedulerState:
             # Persistence failure shouldn't crash the app; ignore errors.
             pass
 
-    # Convenience helpers guarded by lock where needed
-
 
 # ---------------------------
 # Background worker threads
@@ -418,59 +416,63 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
     when a main track is currently playing.
     """
     while state.running:
-        time.sleep(1)
-        with state.lock:
-            ad_file = state.ad_file
-            interval = state.ad_interval_sec
-            in_prayer = state.in_prayer
-        if not ad_file or interval <= 0 or in_prayer:
-            continue
-        # Sleep in 1-second chunks so we can react quickly to prayer starting
-        slept = 0
-        while state.running and slept < interval:
+        try:
             time.sleep(1)
-            slept += 1
-            # If a prayer starts during the wait, abort this ad cycle
             with state.lock:
-                if state.in_prayer or state.ad_file is None or state.ad_interval_sec <= 0:
-                    slept = 0
-                    break
-        if not state.running:
-            break
-        # Re-check conditions right before starting the ad
-        with state.lock:
-            ad_file = state.ad_file
-            in_prayer = state.in_prayer
-            interval = state.ad_interval_sec
-        if not ad_file or interval <= 0 or in_prayer:
-            continue
-
-        # Only play advertisement if a main track is currently playing
-        main_status = state.main_player.get_status()
-        if not main_status.get("is_playing"):
-            continue
-
-        if ad_file and os.path.exists(ad_file):
-            ui.log(
-                "Advertisement cycle: pausing main track for ad "
-                f"({os.path.basename(ad_file)})"
-            )
-            # Play ad as a tracked priority process so it can be stopped by prayer
-            # Use the probed duration (if available) so we honour the full ad
-            # length even if ffplay exits early.
-            with state.lock:
-                ad_duration = state.ad_duration_sec
-            try:
-                state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)
-            finally:
-                # Only resume main if not in prayer anymore
+                ad_file = state.ad_file
+                interval = state.ad_interval_sec
+                in_prayer = state.in_prayer
+            if not ad_file or interval <= 0 or in_prayer:
+                continue
+            # Sleep in 1-second chunks so we can react quickly to prayer starting
+            slept = 0
+            while state.running and slept < interval:
+                time.sleep(1)
+                slept += 1
+                # If a prayer starts during the wait, abort this ad cycle
                 with state.lock:
-                    in_prayer_now = state.in_prayer
-                if not in_prayer_now:
-                    ui.log("Advertisement finished, resuming main track.")
-                    state.main_player.resume()
-                else:
-                    ui.log("Advertisement interrupted by prayer; main track remains paused.")
+                    if state.in_prayer or state.ad_file is None or state.ad_interval_sec <= 0:
+                        slept = 0
+                        break
+            if not state.running:
+                break
+            # Re-check conditions right before starting the ad
+            with state.lock:
+                ad_file = state.ad_file
+                in_prayer = state.in_prayer
+                interval = state.ad_interval_sec
+            if not ad_file or interval <= 0 or in_prayer:
+                continue
+
+            # Only play advertisement if a main track is currently playing
+            main_status = state.main_player.get_status()
+            if not main_status.get("is_playing"):
+                continue
+
+            if ad_file and os.path.exists(ad_file):
+                ui.log(
+                    "Advertisement cycle: pausing main track for ad "
+                    f"({os.path.basename(ad_file)})"
+                )
+                # Play ad as a tracked priority process so it can be stopped by prayer
+                # Use the probed duration (if available) so we honour the full ad
+                # length even if ffplay exits early.
+                with state.lock:
+                    ad_duration = state.ad_duration_sec
+                try:
+                    state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)
+                finally:
+                    # Only resume main if not in prayer anymore
+                    with state.lock:
+                        in_prayer_now = state.in_prayer
+                    if not in_prayer_now:
+                        ui.log("Advertisement finished, resuming main track.")
+                        state.main_player.resume()
+                    else:
+                        ui.log("Advertisement interrupted by prayer; main track remains paused.")
+        except Exception as e:
+            ui.log(f"Error in ad worker: {e}")
+            time.sleep(2)
 
 
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
@@ -480,55 +482,59 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
     resume automatically from the same position once the prayer finishes.
     """
     while state.running:
-        time.sleep(1)
-        now = datetime.now()
-        current_hm = now.strftime("%H:%M")
-        today = now.strftime("%Y-%m-%d")
+        try:
+            time.sleep(1)
+            now = datetime.now()
+            current_hm = now.strftime("%H:%M")
+            today = now.strftime("%Y-%m-%d")
 
-        with state.lock:
-            prayer_file = state.prayer_file
-            times = list(state.prayer_times)
-            last_run = dict(state.prayer_last_run)
+            with state.lock:
+                prayer_file = state.prayer_file
+                times = list(state.prayer_times)
+                last_run = dict(state.prayer_last_run)
 
-        if not prayer_file or not times:
-            continue
+            if not prayer_file or not times:
+                continue
 
-        for t in times:
-            if t == current_hm and last_run.get(t) != today:
-                if os.path.exists(prayer_file):
-                    ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
+            for t in times:
+                if t == current_hm and last_run.get(t) != today:
+                    if os.path.exists(prayer_file):
+                        ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
 
-                    # Wait for any currently playing advertisement to finish
-                    # so that ad tracks are never cut off.
-                    while True:
+                        # Wait for any currently playing advertisement to finish
+                        # so that ad tracks are never cut off.
+                        while True:
+                            with state.lock:
+                                priority_proc = getattr(state.main_player, "_priority_proc", None)
+                            if not priority_proc or priority_proc.poll() is not None:
+                                break
+                            time.sleep(0.5)
+
+                        # Mark that a prayer is in progress so new ads do not start
                         with state.lock:
-                            priority_proc = getattr(state.main_player, "_priority_proc", None)
-                        if not priority_proc or priority_proc.poll() is not None:
-                            break
-                        time.sleep(0.5)
-
-                    # Mark that a prayer is in progress so new ads do not start
-                    with state.lock:
-                        state.prayer_last_run[t] = today
-                        state.in_prayer = True
-                    try:
-                        # Pause main track explicitly so only prayer plays
-                        ui.log("Pausing main track for prayer.")
-                        state.main_player.pause()
-                        # Play prayer track fully (blocking) without touching main state
-                        ui.log("Starting prayer track.")
-                        play_with_ffplay(prayer_file)
-                        ui.log("Prayer track finished, attempting to resume main track (if it was playing before).")
-                        state.main_player.resume()
-                    finally:
-                        # Allow ads again after prayer finishes
-                        with state.lock:
-                            state.in_prayer = False
-                            ui.log("Prayer finished, advertisements allowed again.")
+                            state.prayer_last_run[t] = today
+                            state.in_prayer = True
+                        try:
+                            # Pause main track explicitly so only prayer plays
+                            ui.log("Pausing main track for prayer.")
+                            state.main_player.pause()
+                            # Play prayer track fully (blocking) without touching main state
+                            ui.log("Starting prayer track.")
+                            play_with_ffplay(prayer_file)
+                            ui.log("Prayer track finished, attempting to resume main track (if it was playing before).")
+                            state.main_player.resume()
+                        except Exception as e:
+                            ui.log(f"Prayer playback error: {e}")
+                        finally:
+                            # Allow ads again after prayer finishes
+                            with state.lock:
+                                state.in_prayer = False
+                                ui.log("Prayer finished, advertisements allowed again.")
+        except Exception as e:
+            ui.log(f"Error in prayer worker: {e}")
+            time.sleep(2)
 
 
-# ---------------------------
-# Tkinter UI
 # ---------------------------
 # Tkinter UI
 # ---------------------------
@@ -610,9 +616,6 @@ class MainWindow:
 
         self.search_progress_label = tk.Label(search_frame, text="Tracks played: 0/0")
         self.search_progress_label.pack(side="bottom", anchor="w")
-
-
-        
 
         # --- Main track controls ---
         main_frame = tk.LabelFrame(left_frame, text="Main Track", padx=10, pady=10)
@@ -1038,17 +1041,23 @@ class MainWindow:
             return
 
         self.log(f"Searching YouTube for: {query}")
-        try:
-            results = search_youtube(query)
-        except Exception as e:
-            messagebox.showerror("Error", f"Search failed: {e}")
-            return
+        
+        def _do_search() -> None:
+            try:
+                results = search_youtube(query)
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Search failed: {e}"))
+                return
 
-        if not results:
-            messagebox.showinfo("Search", "No results found.")
-            return
+            if not results:
+                self.root.after(0, lambda: messagebox.showinfo("Search", "No results found."))
+                return
 
-        # Store results and show them in the UI listbox
+            self.root.after(0, self._on_search_results, results)
+
+        threading.Thread(target=_do_search, daemon=True).start()
+
+    def _on_search_results(self, results: list) -> None:
         with self.state.lock:
             self.state.search_results = results
             self.state.search_index = None
@@ -1105,33 +1114,40 @@ class MainWindow:
             return
 
         self.log(f"Resolving and playing: {title}")
-        try:
-            audio_rel = get_audio_url(url)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to resolve audio: {e}")
-            return
+        
+        def _do_resolve() -> None:
+            try:
+                audio_rel = get_audio_url(url)
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to resolve audio: {e}"))
+                return
 
-        if not audio_rel:
-            messagebox.showerror("Error", "Failed to resolve audio URL (yt-dlp error).")
-            return
+            if not audio_rel:
+                self.root.after(0, lambda: messagebox.showerror("Error", "Failed to resolve audio URL (yt-dlp error)."))
+                return
 
-        # get_audio_url returns something like "/api/uploads/<filename>"
-        # We only need the filename and play the file from UPLOAD_FOLDER
-        fname = os.path.basename(audio_rel)
-        path = os.path.join(UPLOAD_FOLDER, fname)
-        if not os.path.exists(path):
-            messagebox.showerror("Error", f"Audio file not found: {path}")
-            return
+            # get_audio_url returns something like "/api/uploads/<filename>"
+            # We only need the filename and play the file from UPLOAD_FOLDER
+            fname = os.path.basename(audio_rel)
+            path = os.path.join(UPLOAD_FOLDER, fname)
+            if not os.path.exists(path):
+                self.root.after(0, lambda: messagebox.showerror("Error", f"Audio file not found: {path}"))
+                return
 
-        self.log(f"Playing search result as main track: {title}")
-        # Remember title and track in history for UI and auto-next
-        with self.state.lock:
-            self.state.main_title = title
-            self.state.main_history.append((path, title))
-            # Newly selected track becomes the current index
-            self.state.main_history_index = len(self.state.main_history) - 1
-        # Play as the main track controlled by SchedulerState.main_player
-        threading.Thread(target=self.state.main_player.play_new, args=(path,), daemon=True).start()
+            self.log(f"Playing search result as main track: {title}")
+            # Remember title and track in history for UI and auto-next
+            with self.state.lock:
+                self.state.main_title = title
+                self.state.main_history.append((path, title))
+                # Newly selected track becomes the current index
+                self.state.main_history_index = len(self.state.main_history) - 1
+            # Play as the main track controlled by SchedulerState.main_player
+            try:
+                self.state.main_player.play_new(path)
+            except Exception as e:
+                self.root.after(0, lambda: messagebox.showerror("Playback Error", str(e)))
+
+        threading.Thread(target=_do_resolve, daemon=True).start()
 
 
 # ---------------------------
