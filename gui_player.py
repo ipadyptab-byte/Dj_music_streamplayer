@@ -12,18 +12,27 @@ import sys
 
 def get_binary_path(binary_name: str) -> str:
     binary_name_ext = binary_name + (".exe" if platform.system() == "Windows" else "")
+    
+    # 1. Check current working directory (where the bat file ran or user double-clicked)
+    cwd_path = os.path.join(os.getcwd(), binary_name_ext)
+    if os.path.exists(cwd_path):
+        return cwd_path
+        
+    # 2. Check exactly where the .exe lives
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(sys.executable)
         exe_path = os.path.join(exe_dir, binary_name_ext)
         if os.path.exists(exe_path):
             return exe_path
-    # Fallback to just the command name (relies on system PATH)
-    return binary_name
+            
+    # 3. Fallback to system PATH
+    return binary_name_ext
 
 # --- PyInstaller Bundle Path Fix ---
 if getattr(sys, "frozen", False):
     exe_dir = os.path.dirname(sys.executable)
-    os.environ["PATH"] = exe_dir + os.pathsep + os.environ.get("PATH", "")
+    cwd_dir = os.getcwd()
+    os.environ["PATH"] = cwd_dir + os.pathsep + exe_dir + os.pathsep + os.environ.get("PATH", "")
 # -----------------------------------
 
 import tkinter as tk
