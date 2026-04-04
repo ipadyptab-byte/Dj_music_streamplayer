@@ -24,8 +24,6 @@ echo ==============================================
 echo Building the standalone Windows Executable...
 echo ==============================================
 
-:: Notice: I removed the --add-binary flags!
-:: Bundling FFmpeg inside the .exe makes the .exe open very slowly.
 pyinstaller --noconfirm --clean --onefile --windowed ^
   --icon "C:\Users\Gusts\Pictures\icon.png" ^
   --name "MusicSchedulerPlayer" ^
@@ -50,5 +48,5 @@ echo - ffmpeg.exe
 echo - ffplay.exe
 echo - ffprobe.exe
 echo.
-echo Keep them together in the same folder.
+echo Keep them together in the same folder!
 pause
