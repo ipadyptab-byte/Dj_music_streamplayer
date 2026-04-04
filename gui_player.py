@@ -10,6 +10,14 @@ import random
 import json
 import sys
 
+# --- PyInstaller Bundle Path Fix ---
+# When running as a compiled PyInstaller EXE, binaries (ffplay, ffmpeg) are extracted
+# to a temporary folder (_MEIPASS). We add this folder to the system PATH so 
+# subprocess and yt-dlp can find them automatically without modifying the rest of the code.
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    os.environ["PATH"] = sys._MEIPASS + os.pathsep + os.environ.get("PATH", "")
+# -----------------------------------
+
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
