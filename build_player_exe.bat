@@ -14,7 +14,6 @@ echo ==============================================
 
 :: Gracefully try to close the running app so we can overwrite it
 taskkill /IM MusicSchedulerPlayer.exe /F 2>nul
-:: Wait 2 seconds for the process to fully close
 timeout /t 2 /nobreak >nul
 
 rmdir /s /q build
@@ -25,17 +24,31 @@ echo ==============================================
 echo Building the standalone Windows Executable...
 echo ==============================================
 
+:: Notice: I removed the --add-binary flags!
+:: Bundling FFmpeg inside the .exe makes the .exe open very slowly.
 pyinstaller --noconfirm --clean --onefile --windowed ^
-  --add-binary "C:\ffmpeg\bin\ffmpeg.exe;." ^
-  --add-binary "C:\ffmpeg\bin\ffplay.exe;." ^
-  --add-binary "C:\ffmpeg\bin\ffprobe.exe;." ^
   --icon "C:\Users\Gusts\Pictures\icon.png" ^
   --name "MusicSchedulerPlayer" ^
   gui_player.py
 
 echo.
 echo ==============================================
+echo Copying FFmpeg files to the dist folder...
+echo ==============================================
+:: This copies the FFmpeg binaries physically right next to the new .exe
+copy "C:\ffmpeg\bin\ffmpeg.exe" "dist\"
+copy "C:\ffmpeg\bin\ffplay.exe" "dist\"
+copy "C:\ffmpeg\bin\ffprobe.exe" "dist\"
+
+echo.
+echo ==============================================
 echo Build Complete!
 echo ==============================================
-echo Look for "MusicSchedulerPlayer.exe" inside the "dist" folder.
+echo Inside your "dist" folder, you now have:
+echo - MusicSchedulerPlayer.exe
+echo - ffmpeg.exe
+echo - ffplay.exe
+echo - ffprobe.exe
+echo.
+echo Keep them together in the same folder.
 pause
