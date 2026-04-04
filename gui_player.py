@@ -52,10 +52,9 @@ def play_with_ffplay(path: str) -> None:
             path,
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
-        raise RuntimeError(
-            "ffplay (from ffmpeg) is not installed or not on PATH.\n"
-            "Please install ffmpeg and restart the application."
-        )
+        bin_path = get_binary_path("ffplay")
+        exists = os.path.exists(bin_path)
+        raise RuntimeError(f"Could not launch ffplay.\nTried path: {bin_path}\nFile exists: {exists}\nAre you running the EXE or the Python script?")
 
 
 class MainTrackPlayer:
@@ -108,7 +107,9 @@ class MainTrackPlayer:
                 creationflags=creationflags,
             )
         except FileNotFoundError:
-            raise RuntimeError("ffplay (from ffmpeg) is not installed or not on PATH.")
+            bin_path = get_binary_path("ffplay")
+            exists = os.path.exists(bin_path)
+            raise RuntimeError(f"Could not launch ffplay.\nTried path: {bin_path}\nFile exists: {exists}\nAre you running the EXE or the Python script?")
 
     def play_new(self, path: str) -> None:
         """Start playing a new main track from the beginning.
