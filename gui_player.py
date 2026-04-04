@@ -11,18 +11,15 @@ import json
 import sys
 
 def get_binary_path(binary_name: str) -> str:
-    """Return the absolute path to the binary if running in PyInstaller, else just the name."""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        return os.path.join(sys._MEIPASS, binary_name + (".exe" if platform.system() == "Windows" else ""))
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        return os.path.join(exe_dir, binary_name + (".exe" if platform.system() == "Windows" else ""))
     return binary_name
 
 # --- PyInstaller Bundle Path Fix ---
-
-# When running as a compiled PyInstaller EXE, binaries (ffplay, ffmpeg) are extracted
-# to a temporary folder (_MEIPASS). We add this folder to the system PATH so 
-# subprocess and yt-dlp can find them automatically without modifying the rest of the code.
-if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    os.environ["PATH"] = sys._MEIPASS + os.pathsep + os.environ.get("PATH", "")
+if getattr(sys, "frozen", False):
+    exe_dir = os.path.dirname(sys.executable)
+    os.environ["PATH"] = exe_dir + os.pathsep + os.environ.get("PATH", "")
 # -----------------------------------
 
 import tkinter as tk
