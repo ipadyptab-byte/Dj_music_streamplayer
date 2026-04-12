@@ -283,6 +283,7 @@
         let scheduleAudio = null;
         let intervalTimer = null;
         let isIntervalPlaying = false;
+        let isSchedulePlaying = false;
         let mainTrackPausedTime = 0;
         let scheduleSong = null;
         let scheduleChecker = null;
@@ -381,7 +382,7 @@
                     const lastRunDate = row.dataset.lastRunDate || null;
                     
                     // Trigger once per day per time
-                    if (checkbox.checked && setTime === currentTime && !isIntervalPlaying && lastRunDate !== todayStr) {
+                    if (checkbox.checked && setTime === currentTime && lastRunDate !== todayStr) {
                         console.log('Triggering scheduled play at:', currentTime);
                         playScheduleTrack();
                         row.dataset.lastRunDate = todayStr;
@@ -396,11 +397,27 @@
             const mainPlayer = document.getElementById('audio-player');
             const wasPlaying = !mainPlayer.paused;
             const originalTrackTitle = document.getElementById('current-track').innerText;
+
+            // If an interval (advertisement) track is currently playing,
+            // stop it when prayer/scheduled track starts.
+            if (isIntervalPlaying && intervalAudio) {
+                try {
+                    intervalAudio.pause();
+                    intervalAudio.currentTime = 0;
+                    intervalAudio.src = "";
+                    intervalAudio.load();
+                } catch (e) {
+                    console.error('Error stopping interval audio before scheduled play:', e);
+                }
+                isIntervalPlaying = false;
+            }
+
+            // Mark that a scheduled/prayer track is now playing
+            isSchedulePlaying = true;
             
             // Explicitly pause the main player to maintain its position
             mainPlayer.pause();
             
-            isIntervalPlaying = true;
             document.getElementById('current-track').innerText = 'Scheduled Play: ' + scheduleSong.title;
             
             try {
@@ -412,17 +429,22 @@
                 }
                 
                 if (audioUrl) {
-                    const scheduleAudio = new Audio(audioUrl);
+                    // Use global scheduleAudio so we could stop it if needed
+                    scheduleAudio = new Audio(audioUrl);
                     
                     const cleanupAndResume = () => {
                         console.log('Stopping schedule audio and resuming main player');
-                        isIntervalPlaying = false;
+                        isSchedulePlaying = false;
                         
                         // Stop and cleanup scheduled audio
-                        scheduleAudio.pause();
-                        scheduleAudio.currentTime = 0;
-                        scheduleAudio.src = "";
-                        scheduleAudio.load();
+                        try {
+                            scheduleAudio.pause();
+                            scheduleAudio.currentTime = 0;
+                            scheduleAudio.src = "";
+                            scheduleAudio.load();
+                        } catch (e) {
+                            console.error('Error cleaning up schedule audio:', e);
+                        }
                         
                         // Resume main player if it was playing
                         if (wasPlaying) {
@@ -450,7 +472,7 @@
                     throw new Error('No audio URL');
                 }
             } catch (error) {
-                isIntervalPlaying = false;
+                isSchedulePlaying = false;
                 if (wasPlaying) mainPlayer.play();
                 document.getElementById('current-track').innerText = originalTrackTitle;
             }
@@ -521,14 +543,18 @@
             if (intervalTimer) clearInterval(intervalTimer);
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
             
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
             intervalTimer = setInterval(() => {
                 const enabled = document.getElementById('interval-enabled').checked;
-                if (enabled && intervalSong && !isIntervalPlaying) {
+                const mainPlayer = document.getElementById('audio-player');
+                const mainIsPlaying = mainPlayer && mainPlayer.src && !mainPlayer.paused;
+
+                // Play interval/ad only when:
+                // - interval is enabled
+                // - we have an interval song
+                // - no interval is currently playing
+                // - no scheduled/prayer track is playing
+                // - main track is currently playing
+                if (enabled && intervalSong && !isIntervalPlaying && !isSchedulePlaying && mainIsPlaying) {
                     console.log('Triggering interval play');
                     playIntervalTrack();
                 }
@@ -543,6 +569,13 @@
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
+
+            // Do not start interval/ad if a scheduled/prayer track is playing
+            if (isSchedulePlaying) {
+                console.log('Skipping interval play because schedule/prayer is playing');
+                return;
+            }
+
             if (mainPlayer.src && !mainPlayer.paused) {
                 const wasPlaying = !mainPlayer.paused;
                 const originalTrackTitle = document.getElementById('current-track').innerText;
@@ -560,11 +593,18 @@
                     }
                     
                     if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
+                        // Use global intervalAudio so we can stop it from schedule/prayer logic
+                        intervalAudio = new Audio(audioUrl);
                         const cleanup = () => {
                             isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
+                            try {
+                                intervalAudio.pause();
+                                intervalAudio.currentTime = 0;
+                                intervalAudio.src = "";
+                                intervalAudio.load();
+                            } catch (e) {
+                                console.error('Error cleaning up interval audio:', e);
+                            }
                             if (wasPlaying) {
                                 mainPlayer.play().catch(e => console.error("Resume failed:", e));
                             }
