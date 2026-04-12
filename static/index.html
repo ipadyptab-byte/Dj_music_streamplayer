@@ -426,10 +426,14 @@
                         
                         // Resume main player if it was playing
                         if (wasPlaying) {
-                            mainPlayer.play().catch(e => {
+                            mainPlayer.play().then(() => {
+                                startIntervalTimer();
+                            }).catch(e => {
                                 console.error("Resume failed:", e);
                                 mainPlayer.load();
-                                mainPlayer.play().catch(e2 => console.error("Final resume failed:", e2));
+                                mainPlayer.play().then(() => {
+                                    startIntervalTimer();
+                                }).catch(e2 => console.error("Final resume failed:", e2));
                             });
                         }
                         document.getElementById('current-track').innerText = originalTrackTitle;
@@ -451,7 +455,11 @@
                 }
             } catch (error) {
                 isIntervalPlaying = false;
-                if (wasPlaying) mainPlayer.play();
+                if (wasPlaying) {
+                    mainPlayer.play().then(() => {
+                        startIntervalTimer();
+                    }).catch(() => {});
+                }
                 document.getElementById('current-track').innerText = originalTrackTitle;
             }
         }
@@ -521,11 +529,6 @@
             if (intervalTimer) clearInterval(intervalTimer);
             const seconds = parseInt(document.getElementById('interval-time').value) || 180;
             
-            // Start the first interval immediately, but only if enabled
-            // The user said they set 30s but it played after 8s. 
-            // This is likely because they changed the value and it restarted, 
-            // but the old timer might have been still running or the restart logic was flawed.
-            
             intervalTimer = setInterval(() => {
                 const enabled = document.getElementById('interval-enabled').checked;
                 if (enabled && intervalSong && !isIntervalPlaying) {
@@ -566,7 +569,9 @@
                             intervalAudio.pause();
                             intervalAudio.src = "";
                             if (wasPlaying) {
-                                mainPlayer.play().catch(e => console.error("Resume failed:", e));
+                                mainPlayer.play().then(() => {
+                                    startIntervalTimer();
+                                }).catch(e => console.error("Resume failed:", e));
                             }
                             document.getElementById('current-track').innerText = originalTrackTitle;
                         };
@@ -581,7 +586,9 @@
                     }
                 } catch (error) {
                     isIntervalPlaying = false;
-                    mainPlayer.play();
+                    mainPlayer.play().then(() => {
+                        startIntervalTimer();
+                    }).catch(() => {});
                     document.getElementById('current-track').innerText = originalTrackTitle;
                 }
             }
@@ -649,11 +656,14 @@
                     if (playPromise !== undefined) {
                         playPromise.then(_ => {
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                            startIntervalTimer();
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
                             // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
-                                player.play().catch(e => {
+                                player.play().then(() => {
+                                    startIntervalTimer();
+                                }).catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
                                 });
                             }, 100);
