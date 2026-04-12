@@ -408,6 +408,10 @@
                 if (!scheduleSong.isLocal) {
                     const response = await fetch(`/api/play?url=${encodeURIComponent(scheduleSong.url)}`);
                     const data = await response.json();
+                    if (!response.ok || !data.url) {
+                        console.error('Schedule backend error:', data);
+                        throw new Error(data.error || 'Failed to resolve scheduled audio URL');
+                    }
                     audioUrl = data.url;
                 }
                 
@@ -435,6 +439,11 @@
                         document.getElementById('current-track').innerText = originalTrackTitle;
                     };
 
+                    scheduleAudio.onerror = () => {
+                        console.error('Schedule audio element failed to load source');
+                        cleanupAndResume();
+                    };
+
                     scheduleAudio.onended = cleanupAndResume;
                     
                     // Robust detection using timeupdate for track completion
@@ -445,13 +454,17 @@
                         }
                     };
                     
-                    scheduleAudio.play();
+                    scheduleAudio.play().catch(err => {
+                        console.error('Schedule play failed:', err);
+                        cleanupAndResume();
+                    });
                 } else {
                     throw new Error('No audio URL');
                 }
             } catch (error) {
+                console.error('playScheduleTrack error:', error);
                 isIntervalPlaying = false;
-                if (wasPlaying) mainPlayer.play();
+                if (wasPlaying) mainPlayer.play().catch(e => console.error('Resume after schedule error failed:', e));
                 document.getElementById('current-track').innerText = originalTrackTitle;
             }
         }
@@ -556,6 +569,10 @@
                     if (!intervalSong.isLocal) {
                         const response = await fetch(`/api/play?url=${encodeURIComponent(intervalSong.url)}`);
                         const data = await response.json();
+                        if (!response.ok || !data.url) {
+                            console.error('Interval backend error:', data);
+                            throw new Error(data.error || 'Failed to resolve interval audio URL');
+                        }
                         audioUrl = data.url;
                     }
                     
@@ -570,6 +587,12 @@
                             }
                             document.getElementById('current-track').innerText = originalTrackTitle;
                         };
+
+                        intervalAudio.onerror = () => {
+                            console.error('Interval audio element failed to load source');
+                            cleanup();
+                        };
+
                         intervalAudio.onended = cleanup;
                         intervalAudio.ontimeupdate = () => {
                             if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
@@ -577,11 +600,15 @@
                                 cleanup();
                             }
                         };
-                        intervalAudio.play();
+                        intervalAudio.play().catch(err => {
+                            console.error('Interval play failed:', err);
+                            cleanup();
+                        });
                     }
                 } catch (error) {
+                    console.error('playIntervalTrack error:', error);
                     isIntervalPlaying = false;
-                    mainPlayer.play();
+                    mainPlayer.play().catch(e => console.error('Resume after interval error failed:', e));
                     document.getElementById('current-track').innerText = originalTrackTitle;
                 }
             }
@@ -619,49 +646,57 @@
         }
 
         async function playTrack(track) {
-            document.getElementById('current-track').innerText = 'Loading: ' + track.title;
+            const currentTrackEl = document.getElementById('current-track');
+            currentTrackEl.innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
             
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                 const data = await response.json();
-                if (data.url) {
-                    player.src = data.url;
-                    player.load();
-                    
-                    player.onended = () => {
-                        if (searchResults.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * searchResults.length);
-                            playTrack(searchResults[randomIndex]);
-                        }
-                    };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
-                    const playPromise = player.play();
-                    
-                    if (playPromise !== undefined) {
-                        playPromise.then(_ => {
-                            document.getElementById('current-track').innerText = 'Playing: ' + track.title;
-                        }).catch(error => {
-                            console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
-                            setTimeout(() => {
-                                player.play().catch(e => {
-                                    document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
-                                });
-                            }, 100);
-                        });
+
+                // PERMANENT SAFETY: never hand <audio> an invalid source
+                if (!response.ok || !data.url) {
+                    console.error('Backend failed to provide playable URL:', data);
+                    currentTrackEl.innerText = 'Cannot play (backend error): ' + track.title;
+                    return;
+                }
+
+                player.src = data.url;
+                player.load();
+                
+                player.onerror = () => {
+                    console.error('Audio element failed to load source:', player.error);
+                    currentTrackEl.innerText = 'Cannot play (audio error): ' + track.title;
+                };
+
+                player.onended = () => {
+                    if (searchResults.length > 0) {
+                        const randomIndex = Math.floor(Math.random() * searchResults.length);
+                        playTrack(searchResults[randomIndex]);
+                    } else {
+                        currentTrackEl.innerText = 'Finished: ' + track.title;
                     }
+                };
+                
+                const playPromise = player.play();
+                
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        currentTrackEl.innerText = 'Playing: ' + track.title;
+                    }).catch(error => {
+                        // Distinguish between autoplay policy vs bad source
+                        if (error.name === 'NotAllowedError') {
+                            console.warn('Autoplay blocked by browser policy:', error);
+                            currentTrackEl.innerText = 'Paused (Click Play button): ' + track.title;
+                        } else {
+                            console.error('Playback failed:', error);
+                            currentTrackEl.innerText = 'Cannot play (playback failed): ' + track.title;
+                        }
+                    });
                 }
             } catch (error) {
-                console.error('Error playing track:', error);
+                console.error('Error in playTrack():', error);
+                document.getElementById('current-track').innerText = 'Error: ' + track.title;
             }
         }
     </script>

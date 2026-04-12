@@ -9,8 +9,12 @@ from threading import Timer
 # ===============================
 # PyInstaller-safe base directory
 # ===============================
+# In development, use the directory of this file.
+# In a PyInstaller EXE, use the directory where the EXE lives so that
+# static/ and uploads/ can live next to the executable and be edited
+# without rebuilding.
 if getattr(sys, 'frozen', False):
-    BASE_DIR = sys._MEIPASS
+    BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
