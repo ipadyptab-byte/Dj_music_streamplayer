@@ -23,6 +23,11 @@
     <h1>Music Search</h1>
     <div class="search-container">
         <input type="text" id="query" placeholder="Search for music...">
+        <select id="source" style="padding: 10px; border: none;">
+            <option value="soundcloud" selected>SoundCloud</option>
+            <option value="jiosaavn">JioSaavn (if API configured)</option>
+            <option value="youtube">YouTube</option>
+        </select>
         <button onclick="search()">Search</button>
     </div>
 
@@ -591,12 +596,13 @@
 
         async function search() {
             const query = document.getElementById('query').value;
+            const source = document.getElementById('source').value;
             if (!query) return;
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = 'Searching...';
             
             try {
-                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}&source=${encodeURIComponent(source)}`);
                 const results = await response.json();
                 searchResults = results; // Store results for autoplay
                 resultsDiv.innerHTML = '';
