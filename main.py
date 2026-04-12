@@ -7,15 +7,19 @@ import webbrowser
 from threading import Timer
 
 # ===============================
-# PyInstaller-safe base directory
+# PyInstaller-safe directories
 # ===============================
+# BASE_DIR: where bundled static files live (read-only in PyInstaller)
+# DATA_DIR: writable directory for user data (uploads, etc.)
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
+    DATA_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = BASE_DIR
 
 STATIC_DIR = os.path.join(BASE_DIR, 'static')
-UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
+UPLOAD_FOLDER = os.path.join(DATA_DIR, 'uploads')
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 

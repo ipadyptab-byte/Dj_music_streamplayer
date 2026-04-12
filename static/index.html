@@ -49,9 +49,12 @@
         <div id="interval-files-list" style="margin-top: 10px; max-height: 150px; overflow-y: auto; border: 1px solid #444; padding: 5px; border-radius: 5px;">
             Loading saved files...
         </div>
-        <div style="margin-top: 10px;">
-            Interval (seconds): <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
+        <div style="margin-top: 10px; display: flex; align-items: center; gap: 10px;">
+            <span>Interval (seconds):</span>
+            <input type="number" id="interval-time" value="180" style="width: 60px; padding: 5px; border-radius: 5px;">
+            <button onclick="setIntervalSettings()" style="padding: 5px 10px; border-radius: 5px; border: none; background: #1db954; color: white; cursor: pointer; font-size: 0.8em;">Set</button>
         </div>
+        <div id="interval-save-status" style="margin-top: 5px; font-size: 0.8em; color: #1db954;"></div>
     </div>
 
     <div style="margin-bottom: 20px; background: #282828; padding: 15px; border-radius: 5px; width: 100%; max-width: 500px;">
@@ -110,7 +113,10 @@
             loadSavedFiles();
             
             // Restore from localStorage
-            const savedInterval = localStorage.getItem('intervalSong');
+            const savedIntervalSeconds = localStorage.getItem('intervalSeconds');
+            if (savedIntervalSeconds) {
+                const intervalInput = document.getElementById('interval-time');
+                if (interval
             if (savedInterval) {
                 intervalSong = JSON.parse(savedInterval);
                 document.getElementById('interval-status').innerText = 'Restored: ' + intervalSong.title;
@@ -540,6 +546,26 @@
             console.log('Interval time changed, restarting timer');
             startIntervalTimer();
         });
+
+        function setIntervalSettings() {
+            const intervalInput = document.getElementById('interval-time');
+            const status = document.getElementById('interval-save-status');
+            const seconds = parseInt(intervalInput.value) || 180;
+
+            // Save to localStorage so it persists across app restarts
+            localStorage.setItem('intervalSeconds', seconds.toString());
+
+            // Restart timer with new value
+            startIntervalTimer();
+
+            // Show user-friendly saved message
+            if (intervalSong) {
+                status.innerText = `Saved: "${intervalSong.title}" every ${seconds} seconds`;
+            } else {
+                status.innerText = `Interval time saved: every ${seconds} seconds`;
+            }
+            status.style.color = '#1db954';
+        }
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
