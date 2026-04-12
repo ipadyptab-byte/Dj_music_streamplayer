@@ -282,7 +282,9 @@
         let intervalAudio = null;
         let scheduleAudio = null;
         let intervalTimer = null;
-        let isIntervalPlaying = false;
+        let isIntervalPlaying = false; // true while either interval or scheduled prayer is playing
+        let isSchedulePlaying = false;
+        let savedMainOnEnded = null; // to restore autoplay after prayer
         let mainTrackPausedTime = 0;
         let scheduleSong = null;
         let scheduleChecker = null;
@@ -396,13 +398,31 @@
             const mainPlayer = document.getElementById('audio-player');
             const wasPlaying = !mainPlayer.paused;
             const originalTrackTitle = document.getElementById('current-track').innerText;
-            
+
+            // Pause any overlay audio (interval/prayer) before starting a new prayer
+            if (intervalAudio) {
+                intervalAudio.pause();
+                intervalAudio.currentTime = 0;
+                intervalAudio = null;
+            }
+            if (scheduleAudio) {
+                scheduleAudio.pause();
+                scheduleAudio.currentTime = 0;
+                scheduleAudio = null;
+            }
+
             // Explicitly pause the main player to maintain its position
             mainPlayer.pause();
-            
+
+            // Mark that prayer is playing and remember autoplay handler so we can
+            // disable it while prayer is active (to avoid next main track starting)
             isIntervalPlaying = true;
+            isSchedulePlaying = true;
+            savedMainOnEnded = mainPlayer.onended;
+            mainPlayer.onended = null;
+
             document.getElementById('current-track').innerText = 'Scheduled Play: ' + scheduleSong.title;
-            
+
             try {
                 let audioUrl = scheduleSong.url;
                 if (!scheduleSong.isLocal) {
@@ -410,20 +430,30 @@
                     const data = await response.json();
                     audioUrl = data.url;
                 }
-                
+
                 if (audioUrl) {
-                    const scheduleAudio = new Audio(audioUrl);
-                    
+                    scheduleAudio = new Audio(audioUrl);
+
                     const cleanupAndResume = () => {
                         console.log('Stopping schedule audio and resuming main player');
                         isIntervalPlaying = false;
-                        
+                        isSchedulePlaying = false;
+
                         // Stop and cleanup scheduled audio
-                        scheduleAudio.pause();
-                        scheduleAudio.currentTime = 0;
-                        scheduleAudio.src = "";
-                        scheduleAudio.load();
-                        
+                        if (scheduleAudio) {
+                            scheduleAudio.pause();
+                            scheduleAudio.currentTime = 0;
+                            scheduleAudio.src = "";
+                            scheduleAudio.load();
+                            scheduleAudio = null;
+                        }
+
+                        // Restore autoplay handler
+                        if (savedMainOnEnded !== null) {
+                            mainPlayer.onended = savedMainOnEnded;
+                            savedMainOnEnded = null;
+                        }
+
                         // Resume main player if it was playing
                         if (wasPlaying) {
                             mainPlayer.play().catch(e => {
@@ -436,7 +466,7 @@
                     };
 
                     scheduleAudio.onended = cleanupAndResume;
-                    
+
                     // Robust detection using timeupdate for track completion
                     scheduleAudio.ontimeupdate = () => {
                         if (scheduleAudio.duration > 0 && scheduleAudio.currentTime >= scheduleAudio.duration) {
@@ -444,13 +474,26 @@
                             cleanupAndResume();
                         }
                     };
-                    
+
                     scheduleAudio.play();
                 } else {
                     throw new Error('No audio URL');
                 }
             } catch (error) {
                 isIntervalPlaying = false;
+                isSchedulePlaying = false;
+
+                if (scheduleAudio) {
+                    scheduleAudio.pause();
+                    scheduleAudio.currentTime = 0;
+                    scheduleAudio = null;
+                }
+
+                if (savedMainOnEnded !== null) {
+                    mainPlayer.onended = savedMainOnEnded;
+                    savedMainOnEnded = null;
+                }
+
                 if (wasPlaying) mainPlayer.play();
                 document.getElementById('current-track').innerText = originalTrackTitle;
             }
@@ -543,14 +586,27 @@
 
         async function playIntervalTrack() {
             const mainPlayer = document.getElementById('audio-player');
+
+            // Do not start interval if a scheduled prayer is playing
+            if (isSchedulePlaying) {
+                return;
+            }
+
             if (mainPlayer.src && !mainPlayer.paused) {
                 const wasPlaying = !mainPlayer.paused;
                 const originalTrackTitle = document.getElementById('current-track').innerText;
-                
+
+                // Stop any existing overlay audio before starting a new interval
+                if (intervalAudio) {
+                    intervalAudio.pause();
+                    intervalAudio.currentTime = 0;
+                    intervalAudio = null;
+                }
+
                 mainPlayer.pause();
                 isIntervalPlaying = true;
                 document.getElementById('current-track').innerText = 'Interval Playing: ' + intervalSong.title;
-                
+
                 try {
                     let audioUrl = intervalSong.url;
                     if (!intervalSong.isLocal) {
@@ -558,13 +614,17 @@
                         const data = await response.json();
                         audioUrl = data.url;
                     }
-                    
+
                     if (audioUrl) {
-                        const intervalAudio = new Audio(audioUrl);
+                        intervalAudio = new Audio(audioUrl);
                         const cleanup = () => {
                             isIntervalPlaying = false;
-                            intervalAudio.pause();
-                            intervalAudio.src = "";
+                            if (intervalAudio) {
+                                intervalAudio.pause();
+                                intervalAudio.src = "";
+                                intervalAudio.currentTime = 0;
+                                intervalAudio = null;
+                            }
                             if (wasPlaying) {
                                 mainPlayer.play().catch(e => console.error("Resume failed:", e));
                             }
@@ -572,7 +632,7 @@
                         };
                         intervalAudio.onended = cleanup;
                         intervalAudio.ontimeupdate = () => {
-                            if (intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
+                            if (intervalAudio && intervalAudio.duration > 0 && intervalAudio.currentTime >= intervalAudio.duration) {
                                 intervalAudio.ontimeupdate = null;
                                 cleanup();
                             }
@@ -581,6 +641,11 @@
                     }
                 } catch (error) {
                     isIntervalPlaying = false;
+                    if (intervalAudio) {
+                        intervalAudio.pause();
+                        intervalAudio.currentTime = 0;
+                        intervalAudio = null;
+                    }
                     mainPlayer.play();
                     document.getElementById('current-track').innerText = originalTrackTitle;
                 }
@@ -619,39 +684,51 @@
         }
 
         async function playTrack(track) {
-            document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
-            
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
-            
+
+            // When starting a main track, stop any overlay (interval/prayer) audio
+            if (intervalAudio) {
+                intervalAudio.pause();
+                intervalAudio.currentTime = 0;
+                intervalAudio = null;
+            }
+            if (scheduleAudio) {
+                scheduleAudio.pause();
+                scheduleAudio.currentTime = 0;
+                scheduleAudio = null;
+            }
+            isIntervalPlaying = false;
+            isSchedulePlaying = false;
+
+            // Restore autoplay handler if a previous prayer had disabled it
+            if (savedMainOnEnded !== null) {
+                player.onended = savedMainOnEnded;
+                savedMainOnEnded = null;
+            }
+
+            document.getElementById('current-track').innerText = 'Loading: ' + track.title;
+
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                 const data = await response.json();
                 if (data.url) {
                     player.src = data.url;
                     player.load();
-                    
+
                     player.onended = () => {
-                        if (searchResults.length > 0) {
+                        if (searchResults.length > 0 && !isSchedulePlaying && !isIntervalPlaying) {
                             const randomIndex = Math.floor(Math.random() * searchResults.length);
                             playTrack(searchResults[randomIndex]);
                         }
                     };
-                    
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
+
                     const playPromise = player.play();
-                    
+
                     if (playPromise !== undefined) {
                         playPromise.then(_ => {
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
                                 player.play().catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
