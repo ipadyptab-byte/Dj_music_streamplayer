@@ -622,10 +622,6 @@
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
             
-            // To prevent autoplay blocks, we should NOT pause or clear the source
-            // if we are already playing and just switching.
-            // But we need to load the new one.
-            
             try {
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
                 const data = await response.json();
@@ -640,20 +636,21 @@
                         }
                     };
                     
-                    // Most reliable way to ensure playback without user interaction
-                    // is to trigger it directly from an event or as a continuation.
-                    // Since we are in the call stack of 'onended' for the previous track,
-                    // some browsers allow this if we don't await too much.
                     const playPromise = player.play();
                     
                     if (playPromise !== undefined) {
                         playPromise.then(_ => {
                             document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                            // Restart the interval timer whenever a new main track
+                            // starts playing, so the interval is measured from this track.
+                            startIntervalTimer();
                         }).catch(error => {
                             console.error("Autoplay blocked:", error);
-                            // If it still fails, we try one more time after a tiny delay
                             setTimeout(() => {
-                                player.play().catch(e => {
+                                player.play().then(() => {
+                                    document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                                    startIntervalTimer();
+                                }).catch(e => {
                                     document.getElementById('current-track').innerText = 'Paused (Click Play): ' + track.title;
                                 });
                             }, 100);
@@ -663,6 +660,24 @@
             } catch (error) {
                 console.error('Error playing track:', error);
             }
+        }
+
+        // Also handle manual play/pause of the main player controls.
+        // When user presses Play on the audio element, we start the interval timer.
+        // When they Pause, we clear the timer so it doesn't fire while music is stopped.
+        const mainPlayerElement = document.getElementById('audio-player');
+        if (mainPlayerElement) {
+            mainPlayerElement.addEventListener('play', () => {
+                if (document.getElementById('interval-enabled').checked && intervalSong) {
+                    startIntervalTimer();
+                }
+            });
+            mainPlayerElement.addEventListener('pause', () => {
+                if (intervalTimer) {
+                    clearTimeout(intervalTimer);
+                    intervalTimer = null;
+                }
+            });
         }
     </script>
 </body>
