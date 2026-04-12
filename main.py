@@ -31,14 +31,21 @@ def open_browser():
 
 # ===============================
 # Helper functions
-# ===============================
-def search_youtube(query):
+# ===========</old_code><new_code>def search_youtube(query):
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
         'quiet': True,
         'extract_flat': True,
         'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
     }
     # Request at least 30 search results (YouTube search is limited by yt_dlp;
     # if fewer are available, you'll simply get as many as YouTube returns).
@@ -62,6 +69,8 @@ def search_youtube(query):
         except Exception as e:
             print("search_youtube error:", e)
             return []
+
+
 def get_audio_url(video_url):
     """Download audio for the given YouTube video and return a local URL.
 
@@ -69,58 +78,91 @@ def get_audio_url(video_url):
     can be blocked in some networks. We download the best audio into the
     UPLOAD_FOLDER and serve it via /api/uploads/...
     """
+    last_error = None
+
     # Prefer Python yt_dlp library to download
     ydl_opts = {
         'format': 'bestaudio/best',
         'quiet': True,
         'noplaylist': True,
+        'retries': 3,
+        # YouTube extraction sometimes fails in restricted environments; using
+        # the android client tends to be more resilient.
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android'],
+            }
+        },
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
         'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
+            downloaded_path = ydl.prepare_filename(info)
+            if downloaded_path and os.path.exists(downloaded_path):
+                filename = os.path.basename(downloaded_path)
+                local_url = f"/api/uploads/{filename}"
+                return local_url, None
+
             video_id = info.get('id')
             ext = info.get('ext', 'm4a')
             if video_id:
                 filename = f"{video_id}.{ext}"
                 local_url = f"/api/uploads/{filename}"
-                return local_url
-            else:
-                print('yt_dlp: missing video id after download')
+                return local_url, None
+
+            last_error = 'yt_dlp: missing filename after download'
+            print(last_error)
     except Exception as e:
-        print('Python yt_dlp download failed:', e)
+        last_error = f'Python yt_dlp download failed: {e}'
+        print(last_error)
 
     # Fallback: try external yt-dlp / yt-dlp.exe if present
     try:
         import shutil, subprocess
         ytdlp_path = shutil.which('yt-dlp') or shutil.which('yt-dlp.exe')
         if not ytdlp_path:
-            print('yt-dlp executable not found on PATH')
-            return None
+            last_error = 'yt-dlp executable not found on PATH'
+            print(last_error)
+            return None, last_error
 
-        # Download to our UPLOAD_FOLDER using yt-dlp CLI
         out_tmpl = os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s')
         result = subprocess.run(
             [
                 ytdlp_path,
                 '-f', 'bestaudio/best',
+                '--no-playlist',
                 '-o', out_tmpl,
+                '--print', 'after_move:filepath',
                 video_url,
             ],
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
-            print('yt-dlp executable download failed:', result.stderr)
-            return None
+            last_error = f'yt-dlp executable download failed: {result.stderr.strip()}'
+            print(last_error)
+            return None, last_error
 
-        # At this point yt-dlp CLI has downloaded the file to UPLOAD_FOLDER,
-        # but we don't know the exact name without extra probing.
-        print('yt-dlp CLI download completed, but filename not resolved in code.')
-        return None
+        downloaded_path = None
+        for line in (result.stdout or '').splitlines():
+            if line.strip():
+                downloaded_path = line.strip()
+        if downloaded_path:
+            filename = os.path.basename(downloaded_path)
+            local_url = f"/api/uploads/{filename}"
+            return local_url, None
+
+        last_error = 'yt-dlp CLI download completed, but filepath was not printed.'
+        print(last_error)
+        return None, last_error
     except Exception as e:
-        print('yt-dlp executable fallback failed:', e)
-        return None
+        last_error = f'yt-dlp executable fallback failed: {e}'
+        print(last_error)
+        return None, last_error
 # ===============================
 # Routes
 # ===============================
@@ -139,13 +181,16 @@ def play():
         return jsonify({'error': 'No URL provided'}), 400
 
     print('/api/play: resolving', video_url, flush=True)
-    audio_url = get_audio_url(video_url)
+    audio_url, error_details = get_audio_url(video_url)
     print('/api/play: resolved audio_url:', audio_url, flush=True)
 
     if audio_url:
         return jsonify({'url': audio_url})
     else:
-        return jsonify({'error': 'Failed to resolve audio URL'}), 500
+        payload = {'error': 'Failed to resolve audio URL'}
+        if error_details:
+            payload['details'] = error_details
+        return jsonify(payload), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
     if 'file' not in request.files:
