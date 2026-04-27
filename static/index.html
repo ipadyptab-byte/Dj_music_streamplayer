@@ -646,6 +646,25 @@
                     player.src = data.url;
                     player.load();
                     
+                    // Handle YouTube embed URLs - use iframe instead
+                    if (data.url.includes('youtube.com/embed')) {
+                        // Show embed in a modal or replace player with iframe
+                        player.style.display = 'none';
+                        let iframe = document.getElementById('youtube-iframe');
+                        if (!iframe) {
+                            iframe = document.createElement('iframe');
+                            iframe.id = 'youtube-iframe';
+                            iframe.style.cssText = 'width:100%;max-width:600px;height:340px;border:none;margin-top:10px;';
+                            player.parentNode.insertBefore(iframe, player);
+                        }
+                        iframe.src = data.url;
+                        iframe.style.display = 'block';
+                    } else {
+                        player.style.display = 'block';
+                        const iframe = document.getElementById('youtube-iframe');
+                        if (iframe) iframe.style.display = 'none';
+                    }
+                    
                     player.onended = () => {
                         if (searchResults.length > 0) {
                             const randomIndex = Math.floor(Math.random() * searchResults.length);

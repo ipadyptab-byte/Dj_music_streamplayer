@@ -215,45 +215,14 @@ def get_youtube_audio_url(video_id):
     return None
 
 def get_audio_url(video_url):
-    """Download audio for the given YouTube video and return a local URL.
-
-    This avoids the browser having to access googlevideo.com directly, which
-    can be blocked in some networks. Use Invidious API as primary method.
-    """
+    """Return YouTube embed URL for direct streaming."""
     import re
-    # Extract video ID from URL
     match = re.search(r'(?:v=|/v/|youtu\.be/)([a-zA-Z0-9_-]{11})', video_url)
     if not match:
-        print("Could not extract video ID from URL")
         return None
-    
     video_id = match.group(1)
-    print(f"Getting audio for video ID: {video_id}")
-    
-    # Try Invidious API first
-    audio_url = get_youtube_audio_url(video_id)
-    if audio_url:
-        print(f"Got audio URL from Invidious: {audio_url[:50]}...")
-        return audio_url
-    
-    # Fallback: Try with yt-dlp with special options
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'noplaylist': True,
-        'outtmpl': os.path.join(UPLOAD_FOLDER, '%(id)s.%(ext)s'),
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            video_id = info.get('id')
-            ext = info.get('ext', 'm4a')
-            if video_id:
-                filename = f"{video_id}.{ext}"
-                local_url = f"/api/uploads/{filename}"
-                return local_url
-    except Exception as e:
-        print('yt_dlp download failed:', e)
+    # Use YouTube embed with autoplay for direct streaming
+    return f"https://www.youtube.com/embed/{video_id}?autoplay=1&player_loop=1"
 # ===============================
 # Routes
 # ===============================
