@@ -308,6 +308,27 @@
             background: rgba(0,210,255,0.1);
             border-radius: 8px;
         }
+        
+        .setting-controls {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        
+        .ctrl-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: transform 0.2s;
+        }
+        
+        .ctrl-btn:hover { transform: scale(1.1); }
+        
+        .ctrl-btn.play { background: linear-gradient(135deg, #00d2ff, #3a7bd5); }
+        .ctrl-btn.pause { background: linear-gradient(135deg, #f39c12, #e74c3c); }
+        .ctrl-btn.delete { background: linear-gradient(135deg, #e74c3c, #c0392b); }
     </style>
 </head>
 <body>
@@ -332,11 +353,21 @@
         </div>
         <div class="setting-row">
             <input type="text" id="advt-query" placeholder="Search for advt music...">
-            <button onclick="searchAdvt()">Set</button>
+            <button onclick="searchAdvt()">Search</button>
+        </div>
+        <div class="setting-row">
+            <label>Or upload:</label>
+            <input type="file" id="advt-file" accept="audio/*">
+            <button onclick="uploadAdvtFile()">Upload</button>
         </div>
         <div class="setting-row">
             <label>Play every (seconds):</label>
             <input type="number" id="advt-interval" value="300" min="60">
+        </div>
+        <div class="setting-controls">
+            <button class="ctrl-btn play" onclick="playAdvt()">▶</button>
+            <button class="ctrl-btn pause" onclick="pauseAdvt()">⏸</button>
+            <button class="ctrl-btn delete" onclick="deleteAdvt()">🗑️</button>
         </div>
         <div class="setting-status" id="advt-status">No advt track set</div>
     </div>
@@ -351,11 +382,21 @@
         </div>
         <div class="setting-row">
             <input type="text" id="prayer-query" placeholder="Search for prayer/bhajan...">
-            <button onclick="searchPrayer()">Set</button>
+            <button onclick="searchPrayer()">Search</button>
+        </div>
+        <div class="setting-row">
+            <label>Or upload:</label>
+            <input type="file" id="prayer-file" accept="audio/*">
+            <button onclick="uploadPrayerFile()">Upload</button>
         </div>
         <div class="setting-row">
             <label>Prayer times (HH:MM):</label>
             <input type="text" id="prayer-times" placeholder="06:00,12:00,18:00">
+        </div>
+        <div class="setting-controls">
+            <button class="ctrl-btn play" onclick="playPrayer()">▶</button>
+            <button class="ctrl-btn pause" onclick="pausePrayer()">⏸</button>
+            <button class="ctrl-btn delete" onclick="deletePrayer()">🗑️</button>
         </div>
         <div class="setting-status" id="prayer-status">No prayer track set</div>
     </div>
@@ -527,6 +568,78 @@
                     localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
                 }
             } catch(e) { console.error(e); }
+        }
+        
+        // Upload advt file
+        async function uploadAdvtFile() {
+            const fileInput = document.getElementById('advt-file');
+            if (!fileInput.files.length) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            try {
+                const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.url) {
+                    advtTrack = { title: data.title || fileInput.files[0].name, url: data.url, platform: 'Local' };
+                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                    localStorage.setItem('advtTrack', JSON.stringify(advtTrack));
+                }
+            } catch(e) { console.error(e); }
+        }
+        
+        // Upload prayer file
+        async function uploadPrayerFile() {
+            const fileInput = document.getElementById('prayer-file');
+            if (!fileInput.files.length) return;
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            try {
+                const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                if (data.url) {
+                    prayerTrack = { title: data.title || fileInput.files[0].name, url: data.url, platform: 'Local' };
+                    prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
+                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                    localStorage.setItem('prayerTrack', JSON.stringify(prayerTrack));
+                    localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
+                }
+            } catch(e) { console.error(e); }
+        }
+        
+        // Play/Pause/Delete advt
+        function playAdvt() {
+            if (advtTrack) playTrack(advtTrack);
+        }
+        
+        function pauseAdvt() {
+            const player = document.getElementById('audio-player');
+            player.pause();
+            document.getElementById('advt-status').innerText = 'Advt paused';
+        }
+        
+        function deleteAdvt() {
+            advtTrack = null;
+            localStorage.removeItem('advtTrack');
+            document.getElementById('advt-status').innerText = 'No advt track set';
+        }
+        
+        // Play/Pause/Delete prayer
+        function playPrayer() {
+            if (prayerTrack) playTrack(prayerTrack);
+        }
+        
+        function pausePrayer() {
+            const player = document.getElementById('audio-player');
+            player.pause();
+            document.getElementById('prayer-status').innerText = 'Prayer paused';
+        }
+        
+        function deletePrayer() {
+            prayerTrack = null;
+            prayerTimes = [];
+            localStorage.removeItem('prayerTrack');
+            localStorage.removeItem('prayerTimes');
+            document.getElementById('prayer-status').innerText = 'No prayer track set';
         }
         
         // Start advt interval timer
