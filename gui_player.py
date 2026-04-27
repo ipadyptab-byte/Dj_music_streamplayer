@@ -13,7 +13,7 @@ import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-from main import UPLOAD_FOLDER, search_youtube, get_audio_url
+from main import UPLOAD_FOLDER, search_all_platforms, get_audio_url
 
 
 # ---------------------------
@@ -1040,11 +1040,11 @@ class MainWindow:
             messagebox.showinfo("Search", "Please enter a search term.")
             return
 
-        self.log(f"Searching YouTube for: {query}")
+        self.log(f"Searching all platforms for: {query}")
         
         def _do_search() -> None:
             try:
-                results = search_youtube(query)
+                results = search_all_platforms(query)
             except Exception as e:
                 self.root.after(0, lambda: messagebox.showerror("Error", f"Search failed: {e}"))
                 return
@@ -1069,7 +1069,8 @@ class MainWindow:
         self.search_results_listbox.delete(0, "end")
         for idx, item in enumerate(results):
             title = item.get("title", "(no title)")
-            self.search_results_listbox.insert("end", f"{idx + 1}. {title}")
+            platform = item.get("platform", "YouTube")
+            self.search_results_listbox.insert("end", f"{idx + 1}. [{platform}] {title}")
 
         if results:
             self.search_results_listbox.selection_set(0)
