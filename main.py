@@ -215,14 +215,15 @@ def get_youtube_audio_url(video_id):
     return None
 
 def get_audio_url(video_url):
-    """Return YouTube embed URL for direct streaming."""
+    """Return YouTube audio-only embed URL for audio-only playback."""
     import re
     match = re.search(r'(?:v=|/v/|youtu\.be/)([a-zA-Z0-9_-]{11})', video_url)
     if not match:
         return None
     video_id = match.group(1)
-    # Use YouTube embed with autoplay for direct streaming
-    return f"https://www.youtube.com/embed/{video_id}?autoplay=1&player_loop=1"
+    # Use YouTube embed with no video (hide video, show only controls) - autoplay with audio
+    # Adding &controls=1&disablekb=1 to minimize video interaction
+    return f"https://www.youtube.com/embed/{video_id}?autoplay=1&loop=1&controls=1&disablekb=1&modestbranding=1&showinfo=0"
 # ===============================
 # Routes
 # ===============================

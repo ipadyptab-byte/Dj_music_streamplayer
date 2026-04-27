@@ -646,15 +646,16 @@
                     player.src = data.url;
                     player.load();
                     
-                    // Handle YouTube embed URLs - use iframe instead
+                    // Handle YouTube embed URLs - use invisible iframe for audio-only
                     if (data.url.includes('youtube.com/embed')) {
-                        // Show embed in a modal or replace player with iframe
+                        // Hide audio player, show invisible iframe for audio-only
                         player.style.display = 'none';
                         let iframe = document.getElementById('youtube-iframe');
                         if (!iframe) {
                             iframe = document.createElement('iframe');
                             iframe.id = 'youtube-iframe';
-                            iframe.style.cssText = 'width:100%;max-width:600px;height:340px;border:none;margin-top:10px;';
+                            iframe.setAttribute('allow', 'autoplay');
+                            iframe.style.cssText = 'position:absolute;width:1px;height:1px;border:none;opacity:0;';
                             player.parentNode.insertBefore(iframe, player);
                         }
                         iframe.src = data.url;
