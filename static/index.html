@@ -231,6 +231,83 @@
             padding: 40px;
             color: rgba(255,255,255,0.5);
         }
+        
+        /* Settings */
+        .settings-section {
+            max-width: 600px;
+            margin: 20px auto;
+            background: rgba(255,255,255,0.08);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .settings-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 5px;
+            color: #00d2ff;
+        }
+        
+        .setting-desc {
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 15px;
+        }
+        
+        .prayer-section {
+            border: 1px solid rgba(255,200,0,0.3);
+        }
+        
+        .prayer-section h2 {
+            color: #ffd700;
+        }
+        
+        .setting-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .setting-row input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+        
+        .setting-row input[type="text"],
+        .setting-row input[type="number"] {
+            flex: 1;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            min-width: 150px;
+        }
+        
+        .setting-row button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            background: linear-gradient(90deg, #00d2ff, #3a7bd5);
+            color: white;
+            cursor: pointer;
+        }
+        
+        .setting-row label {
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .setting-status {
+            font-size: 0.85rem;
+            color: #00d2ff;
+            padding: 8px;
+            background: rgba(0,210,255,0.1);
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -243,6 +320,44 @@
     <div class="search-box">
         <input type="text" id="query" placeholder="Search for your favorite music...">
         <button onclick="search()">Search</button>
+    </div>
+    
+    <!-- Advt Track Settings -->
+    <div class="settings-section">
+        <h2>📢 Advertisement Track</h2>
+        <p class="setting-desc">Plays at fixed interval while main track is playing</p>
+        <div class="setting-row">
+            <input type="checkbox" id="advt-enabled">
+            <label>Enable Advt Track</label>
+        </div>
+        <div class="setting-row">
+            <input type="text" id="advt-query" placeholder="Search for advt music...">
+            <button onclick="searchAdvt()">Set</button>
+        </div>
+        <div class="setting-row">
+            <label>Play every (seconds):</label>
+            <input type="number" id="advt-interval" value="300" min="60">
+        </div>
+        <div class="setting-status" id="advt-status">No advt track set</div>
+    </div>
+    
+    <!-- Prayer Track Settings -->
+    <div class="settings-section prayer-section">
+        <h2>🕐 Prayer Track</h2>
+        <p class="setting-desc">Stops all and plays at fixed time</p>
+        <div class="setting-row">
+            <input type="checkbox" id="prayer-enabled">
+            <label>Enable Prayer Track</label>
+        </div>
+        <div class="setting-row">
+            <input type="text" id="prayer-query" placeholder="Search for prayer/bhajan...">
+            <button onclick="searchPrayer()">Set</button>
+        </div>
+        <div class="setting-row">
+            <label>Prayer times (HH:MM):</label>
+            <input type="text" id="prayer-times" placeholder="06:00,12:00,18:00">
+        </div>
+        <div class="setting-status" id="prayer-status">No prayer track set</div>
     </div>
     
     <div class="results" id="results">
@@ -265,14 +380,15 @@
         let searchResults = [];
         let currentTrackTitle = '';
         let currentTrack = null;
+        let advtTrack = null;
+        let prayerTrack = null;
+        let prayerTimes = [];
         
-        // Initialize clock
-        window.onload = () => {
-            setInterval(() => {
-                const now = new Date();
-                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
-            }, 1000);
-        };
+        // ================= ADV & PRAYER TRACKS =================
+        let advtInterval = 300;
+        let advtTimer = null;
+        let mainPausedTime = null;
+        let prayerChecker = null;
         
         async function search() {
             const query = document.getElementById('query').value;
@@ -370,6 +486,115 @@
         document.getElementById('query').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') search();
         });
+        
+        // ================= ADV & PRAYER TRACKS =================
+        let advtTrack = null;
+        let advtInterval = 300;
+        let advtTimer = null;
+        let mainPausedTime = null;
+        
+        let prayerTrack = null;
+        let prayerTimes = [];
+        let prayerChecker = null;
+        
+        // Search for advt track
+        async function searchAdvt() {
+            const query = document.getElementById('advt-query').value;
+            if (!query) return;
+            try {
+                const response = await fetch('/api/search?q=' + encodeURIComponent(query));
+                const results = await response.json();
+                if (results.length > 0) {
+                    advtTrack = results[0];
+                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                    localStorage.setItem('advtTrack', JSON.stringify(advtTrack));
+                }
+            } catch(e) { console.error(e); }
+        }
+        
+        // Search for prayer track  
+        async function searchPrayer() {
+            const query = document.getElementById('prayer-query').value;
+            if (!query) return;
+            try {
+                const response = await fetch('/api/search?q=' + encodeURIComponent(query));
+                const results = await response.json();
+                if (results.length > 0) {
+                    prayerTrack = results[0];
+                    prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
+                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                    localStorage.setItem('prayerTrack', JSON.stringify(prayerTrack));
+                    localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
+                }
+            } catch(e) { console.error(e); }
+        }
+        
+        // Start advt interval timer
+        function startAdvtTimer() {
+            if (!document.getElementById('advt-enabled').checked || !advtTrack) return;
+            advtInterval = parseInt(document.getElementById('advt-interval').value) || 300;
+            if (advtTimer) clearInterval(advtTimer);
+            advtTimer = setInterval(() => {
+                // Pause main and save time
+                const player = document.getElementById('audio-player');
+                if (!player.paused) {
+                    player.pause();
+                    mainPausedTime = player.currentTime;
+                    playTrack(advtTrack);
+                }
+            }, advtInterval * 1000);
+        }
+        
+        // Start prayer time checker
+        function startPrayerChecker() {
+            if (!document.getElementById('prayer-enabled').checked || !prayerTrack) return;
+            if (prayerChecker) clearInterval(prayerChecker);
+            prayerChecker = setInterval(() => {
+                const now = new Date();
+                const timeStr = now.toTimeString().slice(0, 5);
+                if (prayerTimes.includes(timeStr)) {
+                    // Stop all players
+                    const player = document.getElementById('audio-player');
+                    player.pause();
+                    player.currentTime = 0;
+                    // Hide any iframe
+                    const iframe = document.getElementById('youtube-iframe');
+                    if (iframe) iframe.src = '';
+                    // Play prayer
+                    playTrack(prayerTrack);
+                }
+            }, 1000);
+        }
+        
+        // Restore saved tracks
+        function restoreSettings() {
+            const savedAdvt = localStorage.getItem('advtTrack');
+            if (savedAdvt) {
+                advtTrack = JSON.parse(savedAdvt);
+                document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+            }
+            const savedPrayer = localStorage.getItem('prayerTrack');
+            const savedTimes = localStorage.getItem('prayerTimes');
+            if (savedPrayer && savedTimes) {
+                prayerTrack = JSON.parse(savedPrayer);
+                prayerTimes = JSON.parse(savedTimes);
+                document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+            }
+        }
+        
+        // Update window.onload
+        window.onload = () => {
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
+            }, 1000);
+            restoreSettings();
+            startAdvtTimer();
+            startPrayerChecker();
+            // Check enabled checkboxes
+            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
+            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
+        };
     </script>
 </body>
 </html>
