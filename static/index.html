@@ -92,6 +92,11 @@
 
     <div class="player-container">
         <div id="current-track">No track selected</div>
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <button onclick="playCurrent()" style="padding: 10px 20px; background: #1db954; border: none; border-radius: 50%; cursor: pointer;">▶</button>
+            <button onclick="pauseCurrent()" style="padding: 10px 20px; background: #f39c12; border: none; border-radius: 50%; cursor: pointer;">⏸</button>
+            <button onclick="nextTrack()" style="padding: 10px 20px; background: #3498db; border: none; border-radius: 50%; cursor: pointer;">⏭</button>
+        </div>
         <audio id="audio-player" controls></audio>
     </div>
 
@@ -588,6 +593,8 @@
         }
 
         let searchResults = [];
+        let currentTrackTitle = '';
+        let currentTrack = null;
 
         function getPlatformColor(platform) {
             const colors = {
@@ -631,6 +638,8 @@
         }
 
         async function playTrack(track) {
+            currentTrack = track;
+            currentTrackTitle = track.title;
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             const player = document.getElementById('audio-player');
             
@@ -697,6 +706,27 @@
                 }
             } catch (error) {
                 console.error('Error playing track:', error);
+            }
+        }
+        
+        // Play/Pause/Next control functions
+        function playCurrent() {
+            const player = document.getElementById('audio-player');
+            player.play().catch(e => console.error('Play error:', e));
+            document.getElementById('current-track').innerText = 'Playing: ' + (currentTrackTitle || 'track');
+        }
+        
+        function pauseCurrent() {
+            const player = document.getElementById('audio-player');
+            player.pause();
+            document.getElementById('current-track').innerText = 'Paused: ' + (currentTrackTitle || 'track');
+        }
+        
+        function nextTrack() {
+            if (searchResults.length > 0) {
+                // Play random next track
+                const randomIndex = Math.floor(Math.random() * searchResults.length);
+                playTrack(searchResults[randomIndex]);
             }
         }
     </script>
