@@ -589,6 +589,17 @@
 
         let searchResults = [];
 
+        function getPlatformColor(platform) {
+            const colors = {
+                'YouTube': '#FF0000',
+                'JioSaavn': '#FF6700',
+                'Gaana': '#00A651',
+                'Spotify': '#1DB954',
+                'SoundCloud': '#FF5500'
+            };
+            return colors[platform] || '#666';
+        }
+
         async function search() {
             const query = document.getElementById('query').value;
             if (!query) return;
@@ -605,10 +616,11 @@
                     const div = document.createElement('div');
                     div.className = 'track';
                     div.onclick = () => playTrack(track);
+                    const platformBadge = track.platform ? `<span class="platform-badge" style="background:${getPlatformColor(track.platform)};font-size:0.7em;padding:2px 5px;border-radius:3px;margin-left:5px;">${track.platform}</span>` : '';
                     div.innerHTML = `
                         <img src="${track.thumbnail}" alt="thumbnail">
                         <div class="track-info">
-                            <div>${track.title}</div>
+                            <div>${track.title}${platformBadge}</div>
                         </div>
                     `;
                     resultsDiv.appendChild(div);
@@ -627,7 +639,8 @@
             // But we need to load the new one.
             
             try {
-                const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}`);
+                const platform = track.platform || 'YouTube';
+                const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}&platform=${encodeURIComponent(platform)}`);
                 const data = await response.json();
                 if (data.url) {
                     player.src = data.url;
@@ -659,6 +672,8 @@
                             }, 100);
                         });
                     }
+                } else {
+                    document.getElementById('current-track').innerText = 'Error: ' + (data.error || 'Could not load');
                 }
             } catch (error) {
                 console.error('Error playing track:', error);
