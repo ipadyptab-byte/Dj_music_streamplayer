@@ -157,7 +157,7 @@ def search_all_platforms(query):
     all_results = []
     seen_titles = set()
     
-    # YouTube (most reliable)
+    # YouTube (only platform that works for streaming)
     yt_results = search_youtube(query)
     for track in yt_results:
         title_lower = track['title'].lower()
@@ -165,29 +165,7 @@ def search_all_platforms(query):
             all_results.append(track)
             seen_titles.add(title_lower)
     
-    # JioSaavn
-    saavn_results = search_jio_saavn(query)
-    for track in saavn_results:
-        title_lower = track['title'].lower()
-        if title_lower not in seen_titles:
-            all_results.append(track)
-            seen_titles.add(title_lower)
-    
-    # Gaana
-    gaana_results = search_gaana(query)
-    for track in gaana_results:
-        title_lower = track['title'].lower()
-        if title_lower not in seen_titles:
-            all_results.append(track)
-            seen_titles.add(title_lower)
-    
-    # If we don't have enough results, add placeholder for other platforms
-    if len(all_results) < 5:
-        all_results.extend([
-            {'id': 'spotify_placeholder', 'title': f'{query} - Spotify', 'thumbnail': 'https://via.placeholder.com/60x60?text=Spotify', 'url': '#', 'platform': 'Spotify'},
-            {'id': 'saavn_placeholder', 'title': f'{query} - JioSaavn', 'thumbnail': 'https://via.placeholder.com/60x60?text=Saavn', 'url': '#', 'platform': 'JioSaavn'},
-        ])
-    
+    # Return only YouTube results (other platforms require API keys)
     return all_results
 import json
 import urllib.request
