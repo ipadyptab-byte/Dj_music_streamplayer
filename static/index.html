@@ -489,6 +489,15 @@
                 const iframe = document.getElementById('youtube-iframe');
                 if (iframe) iframe.src = '';
                 player.play().catch(e => console.error('Play error:', e));
+                
+                // Track which track is playing
+                if (track === advtTrack) {
+                    isAdvtPlaying = true;
+                    console.log('Now playing advt track (blob)!');
+                } else {
+                    isAdvtPlaying = false;
+                }
+                
                 document.getElementById('current-track').innerText = 'Playing: ' + track.title;
                 return;
             }
@@ -512,6 +521,14 @@
                         }
                         iframe.src = data.url;
                         iframe.style.display = 'block';
+                    }
+                    
+                    // Track which track is playing
+                    if (track === advtTrack) {
+                        isAdvtPlaying = true;
+                        console.log('Now playing advt track!');
+                    } else {
+                        isAdvtPlaying = false;
                     }
                     
                     document.getElementById('current-track').innerText = 'Playing: ' + track.title;
