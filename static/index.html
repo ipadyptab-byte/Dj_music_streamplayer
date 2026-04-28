@@ -425,12 +425,6 @@
         let prayerTrack = null;
         let prayerTimes = [];
         
-        // ================= ADV & PRAYER TRACKS =================
-        let advtInterval = 300;
-        let advtTimer = null;
-        let mainPausedTime = null;
-        let prayerChecker = null;
-        
         async function search() {
             const query = document.getElementById('query').value;
             if (!query) return;
@@ -527,16 +521,6 @@
         document.getElementById('query').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') search();
         });
-        
-        // ================= ADV & PRAYER TRACKS =================
-        let advtTrack = null;
-        let advtInterval = 300;
-        let advtTimer = null;
-        let mainPausedTime = null;
-        
-        let prayerTrack = null;
-        let prayerTimes = [];
-        let prayerChecker = null;
         
         // Search for advt track
         async function searchAdvt() {
