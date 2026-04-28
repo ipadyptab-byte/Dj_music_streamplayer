@@ -431,39 +431,9 @@
         let mainTrackInfo = null;
         let advtInterval = 300;
         let advtTimer = null;
+        let prayerChecker = null;
         
-        // Initialize 
-        window.onload = function() {
-            // Clock
-            setInterval(() => {
-                const now = new Date();
-                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
-            }, 1000);
-            
-            // Player ended event - resume main after advt
-            const player = document.getElementById('audio-player');
-            player.addEventListener('ended', function() {
-                if (isAdvtPlaying && mainTrackInfo) {
-                    console.log('Advt ended, resuming main track');
-                    isAdvtPlaying = false;
-                    setTimeout(() => {
-                        if (mainTrackInfo) {
-                            playTrack(mainTrackInfo).then(() => {
-                                const p = document.getElementById('audio-player');
-                                p.currentTime = mainPausedTime;
-                            });
-                        }
-                    }, 500);
-                }
-            });
-            
-            restoreSettings();
-            startAdvtTimer();
-            startPrayerChecker();
-            
-            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
-            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
-        };
+        // ===== All Functions Defined Here =====
         
         async function search() {
             const query = document.getElementById('query').value;
@@ -731,6 +701,38 @@
                 document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
             }
         }
+        
+        // Initialize on page load
+        window.onload = function() {
+            // Clock update
+            setInterval(function() {
+                var now = new Date();
+                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
+            }, 1000);
+            
+            // Player ended event - resume main after advt
+            var player = document.getElementById('audio-player');
+            player.addEventListener('ended', function() {
+                if (isAdvtPlaying && mainTrackInfo) {
+                    console.log('Advt ended, resuming main');
+                    isAdvtPlaying = false;
+                    setTimeout(function() {
+                        if (mainTrackInfo) {
+                            playTrack(mainTrackInfo);
+                            var p = document.getElementById('audio-player');
+                            p.currentTime = mainPausedTime;
+                        }
+                    }, 500);
+                }
+            });
+            
+            restoreSettings();
+            startAdvtTimer();
+            startPrayerChecker();
+            
+            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
+            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
+        };
     </script>
 </body>
 </html>
