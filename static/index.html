@@ -644,22 +644,31 @@
         
         // Start advt interval timer
         function startAdvtTimer() {
-            if (!document.getElementById('advt-enabled').checked || !advtTrack) return;
-            advtInterval = parseInt(document.getElementById('advt-interval').value) || 300;
+            var enabled = document.getElementById('advt-enabled').checked;
+            var interval = parseInt(document.getElementById('advt-interval').value) || 300;
+            console.log('startAdvtTimer: enabled=' + enabled + ', advtTrack=' + (advtTrack ? advtTrack.title : 'null') + ', interval=' + interval);
+            
             if (advtTimer) clearInterval(advtTimer);
-            advtTimer = setInterval(() => {
-                const player = document.getElementById('audio-player');
-                // Only trigger if main track is playing
-                if (!player.paused && !player.ended && player.currentTime > 0) {
-                    // If advt is not currently playing
-                    if (!isAdvtPlaying) {
-                        isAdvtPlaying = true;
-                        mainPausedTime = player.currentTime;
-                        player.pause();
-                        playTrack(advtTrack);
-                    }
+            
+            if (!enabled || !advtTrack) {
+                console.log('Advt timer NOT started');
+                return;
+            }
+            
+            advtTimer = setInterval(function() {
+                var player = document.getElementById('audio-player');
+                var isPlaying = !player.paused && !player.ended;
+                console.log('Interval tick: isPlaying=' + isPlaying + ', isAdvtPlaying=' + isAdvtPlaying);
+                
+                if (isPlaying && !isAdvtPlaying) {
+                    console.log('Playing advt now!');
+                    mainPausedTime = player.currentTime;
+                    player.pause();
+                    playTrack(advtTrack);
                 }
-            }, advtInterval * 1000);
+            }, interval * 1000);
+            
+            console.log('Advt timer STARTED!');
         }
         
         // Start prayer time checker
