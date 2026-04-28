@@ -429,32 +429,41 @@
         let isAdvtPlaying = false;
         let mainPausedTime = 0;
         let mainTrackInfo = null;
+        let advtInterval = 300;
+        let advtTimer = null;
         
-        // Initialize player event listeners
-        document.addEventListener('DOMContentLoaded', () => {
+        // Initialize 
+        window.onload = function() {
+            // Clock
+            setInterval(() => {
+                const now = new Date();
+                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
+            }, 1000);
+            
+            // Player ended event - resume main after advt
             const player = document.getElementById('audio-player');
-            
-            // When advt track ends, resume main track
-            player.addEventListener('ended', () => {
+            player.addEventListener('ended', function() {
                 if (isAdvtPlaying && mainTrackInfo) {
+                    console.log('Advt ended, resuming main track');
+                    isAdvtPlaying = false;
                     setTimeout(() => {
-                        isAdvtPlaying = false;
-                        playTrack(mainTrackInfo).then(() => {
-                            const player = document.getElementById('audio-player');
-                            player.currentTime = mainPausedTime;
-                            player.play();
-                        });
-                    }, 1000); // Wait 1 second before resuming
+                        if (mainTrackInfo) {
+                            playTrack(mainTrackInfo).then(() => {
+                                const p = document.getElementById('audio-player');
+                                p.currentTime = mainPausedTime;
+                            });
+                        }
+                    }, 500);
                 }
             });
             
-            // Track main track start
-            player.addEventListener('play', () => {
-                if (!isAdvtPlaying && currentTrack) {
-                    mainTrackInfo = {...currentTrack};
-                }
-            });
-        });
+            restoreSettings();
+            startAdvtTimer();
+            startPrayerChecker();
+            
+            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
+            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
+        };
         
         async function search() {
             const query = document.getElementById('query').value;
@@ -722,20 +731,6 @@
                 document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
             }
         }
-        
-        // Update window.onload
-        window.onload = () => {
-            setInterval(() => {
-                const now = new Date();
-                document.getElementById('current-clock').innerText = now.toLocaleTimeString();
-            }, 1000);
-            restoreSettings();
-            startAdvtTimer();
-            startPrayerChecker();
-            // Check enabled checkboxes
-            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
-            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
-        };
     </script>
 </body>
 </html>
