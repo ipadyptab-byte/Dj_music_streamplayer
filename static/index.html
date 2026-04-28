@@ -466,6 +466,17 @@
             
             const player = document.getElementById('audio-player');
             
+            // Handle Blob URLs (local files)
+            if (track.isBlob || track.url.startsWith('blob:')) {
+                player.src = track.url;
+                player.style.display = 'block';
+                const iframe = document.getElementById('youtube-iframe');
+                if (iframe) iframe.src = '';
+                player.play().catch(e => console.error('Play error:', e));
+                document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                return;
+            }
+            
             try {
                 const platform = track.platform || 'YouTube';
                 const response = await fetch(`/api/play?url=${encodeURIComponent(track.url)}&platform=${encodeURIComponent(platform)}`);
@@ -554,40 +565,32 @@
             } catch(e) { console.error(e); }
         }
         
-        // Upload advt file
+        // Upload advt file - use Blob URL for browser playback
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
             if (!fileInput.files.length) return;
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            try {
-                const response = await fetch('/api/upload', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.url) {
-                    advtTrack = { title: data.title || fileInput.files[0].name, url: data.url, platform: 'Local' };
-                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-                    localStorage.setItem('advtTrack', JSON.stringify(advtTrack));
-                }
-            } catch(e) { console.error(e); }
+            const file = fileInput.files[0];
+            // Create a blob URL that works in the browser
+            const url = URL.createObjectURL(file);
+            advtTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
+            document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+            localStorage.setItem('advtTrack', JSON.stringify(advtTrack));
+            alert('Advt track uploaded! Click Play to preview.');
         }
         
-        // Upload prayer file
+        // Upload prayer file - use Blob URL for browser playback
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
             if (!fileInput.files.length) return;
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            try {
-                const response = await fetch('/api/upload', { method: 'POST', body: formData });
-                const data = await response.json();
-                if (data.url) {
-                    prayerTrack = { title: data.title || fileInput.files[0].name, url: data.url, platform: 'Local' };
-                    prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
-                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-                    localStorage.setItem('prayerTrack', JSON.stringify(prayerTrack));
-                    localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
-                }
-            } catch(e) { console.error(e); }
+            const file = fileInput.files[0];
+            // Create a blob URL that works in the browser
+            const url = URL.createObjectURL(file);
+            prayerTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
+            prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
+            document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+            localStorage.setItem('prayerTrack', JSON.stringify(prayerTrack));
+            localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
+            alert('Prayer track uploaded! Click Play to preview.');
         }
         
         // Play/Pause/Delete advt
