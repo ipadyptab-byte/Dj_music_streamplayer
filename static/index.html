@@ -425,6 +425,37 @@
         let prayerTrack = null;
         let prayerTimes = [];
         
+        // Advt tracking variables
+        let isAdvtPlaying = false;
+        let mainPausedTime = 0;
+        let mainTrackInfo = null;
+        
+        // Initialize player event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            const player = document.getElementById('audio-player');
+            
+            // When advt track ends, resume main track
+            player.addEventListener('ended', () => {
+                if (isAdvtPlaying && mainTrackInfo) {
+                    setTimeout(() => {
+                        isAdvtPlaying = false;
+                        playTrack(mainTrackInfo).then(() => {
+                            const player = document.getElementById('audio-player');
+                            player.currentTime = mainPausedTime;
+                            player.play();
+                        });
+                    }, 1000); // Wait 1 second before resuming
+                }
+            });
+            
+            // Track main track start
+            player.addEventListener('play', () => {
+                if (!isAdvtPlaying && currentTrack) {
+                    mainTrackInfo = {...currentTrack};
+                }
+            });
+        });
+        
         async function search() {
             const query = document.getElementById('query').value;
             if (!query) return;
@@ -465,6 +496,12 @@
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
             
             const player = document.getElementById('audio-player');
+            
+            // Save main track info for resuming after advt
+            if (!isAdvtPlaying) {
+                mainTrackInfo = {...track};
+                mainPausedTime = player.currentTime || 0;
+            }
             
             // Handle Blob URLs (local files)
             if (track.isBlob || track.url.startsWith('blob:')) {
@@ -635,12 +672,16 @@
             advtInterval = parseInt(document.getElementById('advt-interval').value) || 300;
             if (advtTimer) clearInterval(advtTimer);
             advtTimer = setInterval(() => {
-                // Pause main and save time
                 const player = document.getElementById('audio-player');
-                if (!player.paused) {
-                    player.pause();
-                    mainPausedTime = player.currentTime;
-                    playTrack(advtTrack);
+                // Only trigger if main track is playing
+                if (!player.paused && !player.ended && player.currentTime > 0) {
+                    // If advt is not currently playing
+                    if (!isAdvtPlaying) {
+                        isAdvtPlaying = true;
+                        mainPausedTime = player.currentTime;
+                        player.pause();
+                        playTrack(advtTrack);
+                    }
                 }
             }, advtInterval * 1000);
         }
