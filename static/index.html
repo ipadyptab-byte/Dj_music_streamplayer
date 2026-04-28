@@ -606,8 +606,9 @@
             const url = URL.createObjectURL(file);
             advtTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
             document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-            // Don't save blob to localStorage - it won't work after refresh!
             alert('Advt track loaded! Note: Re-upload after page refresh.');
+            // Restart timer if enabled
+            startAdvtTimer();
         }
         
         // Upload prayer file - Blob URL (valid for current session only!)
@@ -619,8 +620,8 @@
             prayerTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
             prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
             document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-            // Don't save blob to localStorage - it won't work after refresh!
             alert('Prayer track loaded! Note: Re-upload after page refresh.');
+            startPrayerChecker();
         }
         
         // Play/Pause/Delete advt
