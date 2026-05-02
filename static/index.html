@@ -434,6 +434,16 @@
         let advtTimer = null;
         let prayerChecker = null;
         
+        // YouTube player state callback
+        function onYouTubeStateChange(event) {
+            // YT.PlayerState: UNSTARTED=-1, BUFFERING=3, PLAYING=1, PAUSED=2, ENDED=0
+            if (event.data === 2) { // Paused
+                isYouTubePlaying = false;
+            } else if (event.data === 1) { // Playing
+                isYouTubePlaying = true;
+            }
+        }
+        
         // ===== All Functions Defined Here =====
         
         async function search() {
@@ -510,18 +520,43 @@
                 
                 if (data.url) {
                     if (data.url.includes('youtube.com/embed')) {
-                        // Use invisible iframe for audio
+                        // Use YouTube IFrame API for proper control
                         player.style.display = 'none';
-                        let iframe = document.getElementById('youtube-iframe');
-                        if (!iframe) {
-                            iframe = document.createElement('iframe');
-                            iframe.id = 'youtube-iframe';
-                            iframe.setAttribute('allow', 'autoplay');
-                            iframe.style.cssText = 'position:absolute;width:1px;height:1px;border:none;opacity:0;';
-                            document.body.appendChild(iframe);
+                        let ytContainer = document.getElementById('youtube-container');
+                        if (!ytContainer) {
+                            ytContainer = document.createElement('div');
+                            ytContainer.id = 'youtube-container';
+                            ytContainer.style.cssText = 'position:fixed;bottom:80px;right:10px;width:200px;height:50px;z-index:9999;opacity:0.3;';
+                            document.body.appendChild(ytContainer);
                         }
-                        iframe.src = data.url;
-                        iframe.style.display = 'block';
+                        
+                        // Extract video ID
+                        const videoId = data.url.match(/\/embed\/([a-zA-Z0-9_-]{11})/)[1];
+                        
+                        // Load YouTube IFrame Player API
+                        if (!window.YT || !window.YT.Player) {
+                            const tag = document.createElement('script');
+                            tag.src = 'https://www.youtube.com/iframe_api';
+                            const firstScriptTag = document.getElementsByTagName('script')[0];
+                            firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+                            window.onYouTubeIframeAPIReady = () => {
+                                window.ytPlayer = new window.YT.Player('youtube-container', {
+                                    videoId: videoId,
+                                    playerVars: { autoplay: 1, loop: 1, controls: 1, modestbranding: 1 },
+                                    events: { 'onStateChange': onYouTubeStateChange }
+                                });
+                            };
+                        } else {
+                            if (window.ytPlayer) {
+                                window.ytPlayer.loadVideoById(videoId);
+                            } else {
+                                window.ytPlayer = new window.YT.Player('youtube-container', {
+                                    videoId: videoId,
+                                    playerVars: { autoplay: 1, loop: 1, controls: 1, modestbranding: 1 },
+                                    events: { 'onStateChange': onYouTubeStateChange }
+                                });
+                            }
+                        }
                         isYouTubePlaying = true;
                     }
                     
@@ -544,20 +579,9 @@
         
         function playCurrent() {
             const player = document.getElementById('audio-player');
-            if (isYouTubePlaying) {
-                // Resume YouTube - need to reload the URL
-                const iframe = document.getElementById('youtube-iframe');
-                if (iframe && currentTrack) {
-                    // Reload YouTube by getting fresh URL from API
-                    fetch(`/api/play?url=${encodeURIComponent(currentTrack.url)}&platform=YouTube`)
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data.url) {
-                                iframe.src = data.url;
-                                iframe.style.display = 'block';
-                            }
-                        });
-                }
+            if (isYouTubePlaying && window.ytPlayer) {
+                // Resume YouTube
+                window.ytPlayer.playVideo();
             } else if (player.src) {
                 player.play();
             }
@@ -567,11 +591,9 @@
         function pauseCurrent() {
             const player = document.getElementById('audio-player');
             player.pause();
-            // Stop YouTube iframe if playing
-            const iframe = document.getElementById('youtube-iframe');
-            if (iframe) {
-                iframe.src = '';
-                iframe.style.display = 'none';
+            // Stop YouTube player if playing
+            if (window.ytPlayer) {
+                window.ytPlayer.pauseVideo();
             }
             isYouTubePlaying = false;
             document.getElementById('current-track').innerText = 'Paused: ' + (currentTrackTitle || 'track');
