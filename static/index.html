@@ -434,6 +434,7 @@
         let mainTrackInfo = null;
         let advtInterval = 300;
         let advtTimer = null;
+        let advtIntervalCounter = -1;  // Countdown for next ad (-1 = not started yet)
         let prayerChecker = null;
         let shouldResumeWithSeek = false; // Track if we should seek after loading
         
@@ -743,29 +744,48 @@
                 return;
             }
             
-            // Wait for main track to be selected first (mainTrackInfo must be set)
-            if (!mainTrackInfo) {
-                console.log('Advt timer waiting for main track to be selected...');
-            }
-            
+            // Use a 1-second interval for precise control
             advtTimer = setInterval(function() {
-                // FIRST: Check if main track has been selected
+                // Check conditions
                 if (!mainTrackInfo) {
-                    console.log('Waiting for main track to be selected...');
+                    // Reset counter when no main track
+                    advtIntervalCounter = -1;
                     return;
                 }
                 
                 var player = document.getElementById('audio-player');
                 var audioPlaying = !player.paused && !player.ended;
-                // Also check if YouTube is playing
                 var youtubePlaying = isYouTubePlaying && window.ytPlayer && window.ytPlayer.getPlayerState() === 1;
                 var isPlaying = audioPlaying || youtubePlaying;
-                console.log('Interval tick: audioPlaying=' + audioPlaying + ', youtubePlaying=' + youtubePlaying + ', isAdvtPlaying=' + isAdvtPlaying);
                 
-                if (isPlaying && !isAdvtPlaying) {
+                // If we just finished ad, restart the interval countdown
+                if (isAdvtPlaying === false && advtIntervalCounter === -2) {
+                    // Ad just ended - restart interval countdown
+                    console.log('Restarting advt interval countdown...');
+                    advtIntervalCounter = interval;
+                }
+                
+                // Initialize counter when main track first starts playing
+                if (advtIntervalCounter === -1 && isPlaying) {
+                    console.log('Main track started - starting advt interval countdown');
+                    advtIntervalCounter = interval;
+                }
+                
+                // Countdown if active
+                if (advtIntervalCounter > 0) {
+                    advtIntervalCounter--;
+                    // Only log occasionally to avoid spam
+                    if (advtIntervalCounter % 30 === 0 || advtIntervalCounter === interval) {
+                        console.log('Advt countdown: ' + advtIntervalCounter + 's remaining');
+                    }
+                }
+                
+                // Time to play ad!
+                if (advtIntervalCounter === 0 && isPlaying && !isAdvtPlaying) {
                     console.log('Playing advt now!');
-                    // Increment ad play count
                     advtPlayCount++;
+                    advtIntervalCounter = -2;  // Mark as waiting for ad to finish
+                    
                     // Pause current player
                     if (youtubePlaying && window.ytPlayer) {
                         window.ytPlayer.pauseVideo();
@@ -774,9 +794,9 @@
                     }
                     playTrack(advtTrack);
                 }
-            }, interval * 1000);
+            }, 1000);
             
-            console.log('Advt timer STARTED!');
+            console.log('Advt timer STARTED with countdown!');
         }
         
         // Start prayer time checker
