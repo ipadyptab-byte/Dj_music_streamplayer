@@ -199,9 +199,8 @@ def get_audio_url(video_url):
     if not match:
         return None
     video_id = match.group(1)
-    # Use YouTube embed with no video (hide video, show only controls) - autoplay with audio
-    # Adding &controls=1&disablekb=1 to minimize video interaction
-    return f"https://www.youtube.com/embed/{video_id}?autoplay=1&loop=1&controls=1&disablekb=1&modestbranding=1&showinfo=0"
+    # Use YouTube embed - autoplay is controlled by JS, not in URL
+    return f"https://www.youtube.com/embed/{video_id}?loop=1&controls=1&disablekb=1&modestbranding=1&showinfo=0"
 # ===============================
 # Routes
 # ===============================
@@ -276,6 +275,13 @@ def delete_file():
 # ===============================
 # App start
 # ===============================
+# Vercel uses the app object directly, only run locally
 if __name__ == '__main__':
-    Timer(1, open_browser).start()
+    # Don't auto-open browser in production-like environments
+    import os
+    if os.environ.get('VERCEL') != '1':
+        Timer(1, open_browser).start()
     app.run(host='127.0.0.1', port=5000)
+
+# For Vercel serverless
+app.debug = False

@@ -424,6 +424,7 @@
         let advtTrack = null;
         let prayerTrack = null;
         let prayerTimes = [];
+        let isYouTubePlaying = false;  // Track if YouTube is playing
         
         // Advt tracking variables
         let isAdvtPlaying = false;
@@ -521,6 +522,7 @@
                         }
                         iframe.src = data.url;
                         iframe.style.display = 'block';
+                        isYouTubePlaying = true;
                     }
                     
                     // Track which track is playing
@@ -542,15 +544,36 @@
         
         function playCurrent() {
             const player = document.getElementById('audio-player');
-            if (player.src) {
+            if (isYouTubePlaying) {
+                // Resume YouTube - need to reload the URL
+                const iframe = document.getElementById('youtube-iframe');
+                if (iframe && currentTrack) {
+                    // Reload YouTube by getting fresh URL from API
+                    fetch(`/api/play?url=${encodeURIComponent(currentTrack.url)}&platform=YouTube`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.url) {
+                                iframe.src = data.url;
+                                iframe.style.display = 'block';
+                            }
+                        });
+                }
+            } else if (player.src) {
                 player.play();
-                document.getElementById('current-track').innerText = 'Playing: ' + (currentTrackTitle || 'track');
             }
+            document.getElementById('current-track').innerText = 'Playing: ' + (currentTrackTitle || 'track');
         }
         
         function pauseCurrent() {
             const player = document.getElementById('audio-player');
             player.pause();
+            // Stop YouTube iframe if playing
+            const iframe = document.getElementById('youtube-iframe');
+            if (iframe) {
+                iframe.src = '';
+                iframe.style.display = 'none';
+            }
+            isYouTubePlaying = false;
             document.getElementById('current-track').innerText = 'Paused: ' + (currentTrackTitle || 'track');
         }
         
