@@ -775,11 +775,20 @@
                 var youtubePlaying = isYouTubePlaying && window.ytPlayer && window.ytPlayer.getPlayerState() === 1;
                 var isPlaying = audioPlaying || youtubePlaying;
                 
-                // If we just finished ad, restart the interval countdown
-                if (isAdvtPlaying === false && advtIntervalCounter === -2) {
-                    // Ad just ended - restart interval countdown
-                    console.log('Restarting advt interval countdown...');
-                    advtIntervalCounter = interval;
+                // Check if ad finished playing (state -2 means ad was playing)
+                if (advtIntervalCounter === -2 && !isPlaying && mainTrackInfo) {
+                    // Ad ended - resume main track from saved position
+                    console.log('Advt ended - resuming main from ' + mainPausedTime);
+                    advtIntervalCounter = -3;  // Temporary state while resuming
+                    // Resume main track
+                    playTrack(mainTrackInfo);
+                    player.currentTime = mainPausedTime;
+                    // After short delay, restart countdown
+                    setTimeout(() => {
+                        console.log('Restarting advt interval countdown...');
+                        advtIntervalCounter = interval;
+                    }, 1000);
+                    return;  // Skip rest of this cycle
                 }
                 
                 // Initialize counter when main track first starts playing
