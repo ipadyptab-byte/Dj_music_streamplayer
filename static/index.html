@@ -433,6 +433,7 @@
         let advtInterval = 300;
         let advtTimer = null;
         let prayerChecker = null;
+        let shouldResumeWithSeek = false; // Track if we should seek after loading
         
         // YouTube player state callback
         function onYouTubeStateChange(event) {
@@ -441,6 +442,20 @@
                 isYouTubePlaying = false;
             } else if (event.data === 1) { // Playing
                 isYouTubePlaying = true;
+                // Seek to saved position if resuming
+                if (shouldResumeWithSeek && window.ytPlayer && mainPausedTime > 0) {
+                    window.ytPlayer.seekTo(mainPausedTime, true);
+                    shouldResumeWithSeek = false;
+                }
+            } else if (event.data === 0) { // Ended - resume main after advt
+                if (isAdvtPlaying && mainTrackInfo) {
+                    console.log('Advt ended, resuming main');
+                    isAdvtPlaying = false;
+                    shouldResumeWithSeek = true;
+                    setTimeout(function() {
+                        playTrack(mainTrackInfo);
+                    }, 500);
+                }
             }
         }
         
@@ -490,7 +505,12 @@
             // Save main track info for resuming after advt
             if (!isAdvtPlaying) {
                 mainTrackInfo = {...track};
-                mainPausedTime = player.currentTime || 0;
+                // Save position from either audio or YouTube
+                if (isYouTubePlaying && window.ytPlayer) {
+                    mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
+                } else {
+                    mainPausedTime = player.currentTime || 0;
+                }
             }
             
             // Handle Blob URLs (local files)
