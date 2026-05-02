@@ -428,6 +428,8 @@
         
         // Advt tracking variables
         let isAdvtPlaying = false;
+        let advtPlayCount = 0;  // How many times ad was started
+        let advtPlayFinished = 0;  // How many times ad finished
         let mainPausedTime = 0;
         let mainTrackInfo = null;
         let advtInterval = 300;
@@ -762,6 +764,8 @@
                 
                 if (isPlaying && !isAdvtPlaying) {
                     console.log('Playing advt now!');
+                    // Increment ad play count
+                    advtPlayCount++;
                     // Pause current player
                     if (youtubePlaying && window.ytPlayer) {
                         window.ytPlayer.pauseVideo();
@@ -839,17 +843,39 @@
             var player = document.getElementById('audio-player');
             player.addEventListener('ended', function() {
                 if (isAdvtPlaying && mainTrackInfo) {
-                    console.log('Advt ended, resuming main');
+                    console.log('Advt ended (event), resuming main');
+                    const wasAdvt = isAdvtPlaying;
                     isAdvtPlaying = false;
                     setTimeout(function() {
-                        if (mainTrackInfo) {
+                        if (wasAdvt && mainTrackInfo) {
+                            console.log('Resuming main track: ' + mainTrackInfo.title);
                             playTrack(mainTrackInfo);
-                            var p = document.getElementById('audio-player');
-                            p.currentTime = mainPausedTime;
+                            player.currentTime = mainPausedTime;
                         }
                     }, 500);
                 }
             });
+            
+            // Periodically check if ad finished playing (fallback for reliable detection)
+            setInterval(function() {
+                if (isAdvtPlaying) {
+                    var audioPlaying = !player.paused && !player.ended;
+                    if (!audioPlaying) {
+                        // Ad stopped - check if it was actually playing via playCount
+                        if (advtPlayCount > 0 && advtPlayCount === advtPlayFinished) {
+                            // Ad finished - resume main
+                            console.log('Advt ended (poll), resuming main');
+                            const wasAdvt = isAdvtPlaying;
+                            isAdvtPlaying = false;
+                            if (mainTrackInfo) {
+                                console.log('Resuming main track: ' + mainTrackInfo.title);
+                                playTrack(mainTrackInfo);
+                                player.currentTime = mainPausedTime;
+                            }
+                        }
+                    }
+                }
+            }, 1000);
             
             restoreSettings();
             startAdvtTimer();
