@@ -720,13 +720,20 @@
             
             advtTimer = setInterval(function() {
                 var player = document.getElementById('audio-player');
-                var isPlaying = !player.paused && !player.ended;
-                console.log('Interval tick: isPlaying=' + isPlaying + ', isAdvtPlaying=' + isAdvtPlaying);
+                var audioPlaying = !player.paused && !player.ended;
+                // Also check if YouTube is playing
+                var youtubePlaying = isYouTubePlaying && window.ytPlayer && window.ytPlayer.getPlayerState() === 1;
+                var isPlaying = audioPlaying || youtubePlaying;
+                console.log('Interval tick: audioPlaying=' + audioPlaying + ', youtubePlaying=' + youtubePlaying + ', isAdvtPlaying=' + isAdvtPlaying);
                 
                 if (isPlaying && !isAdvtPlaying) {
                     console.log('Playing advt now!');
-                    mainPausedTime = player.currentTime;
-                    player.pause();
+                    // Pause current player
+                    if (youtubePlaying && window.ytPlayer) {
+                        window.ytPlayer.pauseVideo();
+                    } else {
+                        player.pause();
+                    }
                     playTrack(advtTrack);
                 }
             }, interval * 1000);
