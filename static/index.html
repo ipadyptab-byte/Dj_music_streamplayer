@@ -738,7 +738,18 @@
                 return;
             }
             
+            // Wait for main track to be selected first (mainTrackInfo must be set)
+            if (!mainTrackInfo) {
+                console.log('Advt timer waiting for main track to be selected...');
+            }
+            
             advtTimer = setInterval(function() {
+                // FIRST: Check if main track has been selected
+                if (!mainTrackInfo) {
+                    console.log('Waiting for main track to be selected...');
+                    return;
+                }
+                
                 var player = document.getElementById('audio-player');
                 var audioPlaying = !player.paused && !player.ended;
                 // Also check if YouTube is playing
