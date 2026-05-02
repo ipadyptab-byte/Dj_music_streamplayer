@@ -438,6 +438,10 @@
         let prayerChecker = null;
         let shouldResumeWithSeek = false; // Track if we should seek after loading
         
+        // Prayer tracking variables
+        let inPrayer = false;  // Currently playing prayer
+        let prayerJustEnded = false;  // Prayer just finished (for resuming)
+        
         // YouTube player state callback
         function onYouTubeStateChange(event) {
             // YT.PlayerState: UNSTARTED=-1, BUFFERING=3, PLAYING=1, PAUSED=2, ENDED=0
@@ -505,8 +509,9 @@
             
             const player = document.getElementById('audio-player');
             
-            // Determine if this track is the advertisement (BEFORE saving mainTrackInfo)
+            // Determine if this track is the advertisement or prayer
             const isPlayingAdvt = (track === advtTrack);
+            const isPlayingPrayer = (track === prayerTrack);
             
             // Handle Blob URLs (local files)
             if (track.isBlob || track.url.startsWith('blob:')) {
@@ -516,12 +521,18 @@
                 if (iframe) iframe.src = '';
                 player.play().catch(e => console.error('Play error:', e));
                 
-                // Track which track is playing - NOW we know if it's advt
+                // Track which track is playing
                 if (isPlayingAdvt) {
                     isAdvtPlaying = true;
+                    inPrayer = false;  // Not prayer
                     console.log('Now playing advt track (blob)!');
+                } else if (isPlayingPrayer) {
+                    inPrayer = true;
+                    isAdvtPlaying = false;
+                    console.log('Now playing prayer track!');
                 } else {
-                    // This is the MAIN track - save for resume after advt
+                    // This is the MAIN track - save for resume after advt/prayer
+                    inPrayer = false;
                     isAdvtPlaying = false;
                     mainTrackInfo = {...track};
                     if (isYouTubePlaying && window.ytPlayer) {
@@ -586,9 +597,15 @@
                     // Track which track is playing
                     if (isPlayingAdvt) {
                         isAdvtPlaying = true;
+                        inPrayer = false;
                         console.log('Now playing advt track!');
+                    } else if (isPlayingPrayer) {
+                        inPrayer = true;
+                        isAdvtPlaying = false;
+                        console.log('Now playing prayer track!');
                     } else {
-                        // This is the MAIN track - save for resume after advt
+                        // This is the MAIN track - save for resume after advt/prayer
+                        inPrayer = false;
                         isAdvtPlaying = false;
                         mainTrackInfo = {...track};
                         console.log('Main track saved for resume: ' + track.title);
@@ -806,16 +823,60 @@
             prayerChecker = setInterval(() => {
                 const now = new Date();
                 const timeStr = now.toTimeString().slice(0, 5);
-                if (prayerTimes.includes(timeStr)) {
-                    // Stop all players
-                    const player = document.getElementById('audio-player');
-                    player.pause();
-                    player.currentTime = 0;
-                    // Hide any iframe
+                if (prayerTimes.includes(timeStr) && !inPrayer) {
+                    // Save main track position before stopping
+                    var player = document.getElementById('audio-player');
+                    if (isYouTubePlaying && window.ytPlayer) {
+                        mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
+                    } else {
+                        mainPausedTime = player.currentTime || 0;
+                    }
+                    
+                    // Stop all - main track and advertisement
+                    console.log('Prayer starting - stopping all tracks');
+                    inPrayer = true;
+                    isAdvtPlaying = false;  // Stop ad
+                    
+                    // Stop main track
+                    if (isYouTubePlaying && window.ytPlayer) {
+                        window.ytPlayer.pauseVideo();
+                    } else {
+                        player.pause();
+                    }
+                    
+                    // Hide YouTube iframe
                     const iframe = document.getElementById('youtube-iframe');
                     if (iframe) iframe.src = '';
+                    
                     // Play prayer
+                    console.log('Playing prayer: ' + prayerTrack.title);
                     playTrack(prayerTrack);
+                    
+                    // Schedule resume after prayer ends
+                    const checkPrayerEnd = setInterval(() => {
+                        if (!inPrayer) {
+                            clearInterval(checkPrayerEnd);
+                            return;
+                        }
+                        var audioPaused = player.paused || player.ended;
+                        var ytNotPlaying = !isYouTubePlaying || (window.ytPlayer && window.ytPlayer.getPlayerState() !== 1);
+                        if (audioPaused && ytNotPlaying) {
+                            // Prayer ended - resume main
+                            clearInterval(checkPrayerEnd);
+                            console.log('Prayer ended - resuming main');
+                            inPrayer = false;
+                            if (mainTrackInfo) {
+                                setTimeout(() => {
+                                    console.log('Resuming main: ' + mainTrackInfo.title);
+                                    playTrack(mainTrackInfo);
+                                    player.currentTime = mainPausedTime;
+                                    // Restart ad interval countdown
+                                    var interval = parseInt(document.getElementById('advt-interval').value) || 300;
+                                    advtIntervalCounter = interval;
+                                }, 500);
+                            }
+                        }
+                    }, 1000);
                 }
             }, 1000);
         }
