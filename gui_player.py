@@ -463,9 +463,15 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
     until main track changes or ends. When main track ends, picks another
     random track from history and plays it.
     Ensures that advertisements never overlap with prayer.
+    
+    IMPORTANT: Main track must already be playing before ad cycle starts.
     """
     # Track current main file to detect when it changes
     current_main_file = None
+    # Track if we've already logged the waiting message
+    waiting_logged = False
+    # Track pending interval wait (seconds remaining)
+    interval_pending = None
     
     while state.running:
         try:
@@ -477,20 +483,37 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 ad_play_duration = state.ad_play_duration_sec
             
             if not ad_file or interval <= 0 or in_prayer:
+                interval_pending = None
                 continue
                 
-            # Sleep in 1-second chunks so we can react quickly to prayer starting
-            slept = 0
-            while state.running and slept < interval:
-                time.sleep(1)
-                slept += 1
-                # If prayer starts during wait, abort this ad cycle
-                with state.lock:
-                    if state.in_prayer or state.ad_file is None or state.ad_interval_sec <= 0:
-                        slept = 0
-                        break
-            if not state.running:
-                break
+            # Check if main track is currently playing FIRST
+            main_status = state.main_player.get_status()
+            if not main_status.get("is_playing"):
+                # No main track playing - just wait for main to start
+                # Don't track any pending interval
+                if not waiting_logged:
+                    ui.log("Waiting for main track to start playing...")
+                    waiting_logged = True
+                interval_pending = None
+                continue
+            
+            # Main track IS playing now
+            waiting_logged = False
+            
+            # Handle interval timing
+            if interval_pending is None:
+                # First time main is playing (or after main was stopped)
+                # Start fresh interval countdown
+                interval_pending = interval
+            
+            # Countdown the interval
+            interval_pending -= 1
+            if interval_pending > 0:
+                continue
+            
+            # Interval complete - now play ad!
+            # Reset interval for next cycle
+            interval_pending = None
             # Re-check conditions right before starting the ad
             with state.lock:
                 ad_file = state.ad_file
