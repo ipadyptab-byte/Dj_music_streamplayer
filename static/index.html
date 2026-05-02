@@ -502,16 +502,8 @@
             
             const player = document.getElementById('audio-player');
             
-            // Save main track info for resuming after advt
-            if (!isAdvtPlaying) {
-                mainTrackInfo = {...track};
-                // Save position from either audio or YouTube
-                if (isYouTubePlaying && window.ytPlayer) {
-                    mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
-                } else {
-                    mainPausedTime = player.currentTime || 0;
-                }
-            }
+            // Determine if this track is the advertisement (BEFORE saving mainTrackInfo)
+            const isPlayingAdvt = (track === advtTrack);
             
             // Handle Blob URLs (local files)
             if (track.isBlob || track.url.startsWith('blob:')) {
@@ -521,12 +513,20 @@
                 if (iframe) iframe.src = '';
                 player.play().catch(e => console.error('Play error:', e));
                 
-                // Track which track is playing
-                if (track === advtTrack) {
+                // Track which track is playing - NOW we know if it's advt
+                if (isPlayingAdvt) {
                     isAdvtPlaying = true;
                     console.log('Now playing advt track (blob)!');
                 } else {
+                    // This is the MAIN track - save for resume after advt
                     isAdvtPlaying = false;
+                    mainTrackInfo = {...track};
+                    if (isYouTubePlaying && window.ytPlayer) {
+                        mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
+                    } else {
+                        mainPausedTime = player.currentTime || 0;
+                    }
+                    console.log('Main track saved for resume: ' + track.title);
                 }
                 
                 document.getElementById('current-track').innerText = 'Playing: ' + track.title;
@@ -581,11 +581,14 @@
                     }
                     
                     // Track which track is playing
-                    if (track === advtTrack) {
+                    if (isPlayingAdvt) {
                         isAdvtPlaying = true;
                         console.log('Now playing advt track!');
                     } else {
+                        // This is the MAIN track - save for resume after advt
                         isAdvtPlaying = false;
+                        mainTrackInfo = {...track};
+                        console.log('Main track saved for resume: ' + track.title);
                     }
                     
                     document.getElementById('current-track').innerText = 'Playing: ' + track.title;
