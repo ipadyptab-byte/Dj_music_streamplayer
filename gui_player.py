@@ -262,6 +262,49 @@ class MainTrackPlayer:
                 if getattr(self, "_priority_proc", None) is proc:
                     self._priority_proc = None
 
+    def play_ad_timed(self, path: str, play_duration_sec: int) -> None:
+        """Play an advertisement for the specified duration, then stop it.
+
+        This is used for the repeat mode where the ad plays for a fixed time
+        then repeats. The ad file is played but cut off after play_duration_sec.
+        """
+        # Pause main track if it's playing
+        with self._lock:
+            if self._proc and self._proc.poll() is None:
+                self._update_offset_locked()
+                self._stop_reason = "interrupt"
+                self._proc.terminate()
+                self._proc = None
+        
+        # Start ad as a tracked priority process (no normalization)
+        start_ts = time.monotonic()
+        proc = self._start_ffplay(path, 0.0, normalize=False)
+        with self._lock:
+            self._priority_proc = proc
+        
+        try:
+            # Wait for either the ad to finish OR the duration to elapse
+            while proc.poll() is None:
+                elapsed = time.monotonic() - start_ts
+                if elapsed >= play_duration_sec:
+                    # Time's up - stop the ad
+                    break
+                time.sleep(0.1)
+        finally:
+            # Ensure the ffplay process is stopped
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=2)
+                except Exception:
+                    pass
+            with self._lock:
+                if getattr(self, "_priority_proc", None) is proc:
+                    self._priority_proc = None
+
     def get_status(self) -> dict:
         """Return info about the current main track: path, playing flag, elapsed seconds.
 
@@ -321,6 +364,8 @@ class SchedulerState:
         self.ad_interval_sec: int = 180
         # Duration (seconds) of the current advertisement track, if known
         self.ad_duration_sec: float | None = None
+        # How many seconds to play the ad track before repeating (until main track changes)
+        self.ad_play_duration_sec: int = 30
 
         self.prayer_file: str | None = None
         # List[str] of "HH:MM" times
@@ -374,6 +419,7 @@ class SchedulerState:
             self.ad_file = data.get("ad_file") or None
             self.ad_interval_sec = int(data.get("ad_interval_sec", 180))
             self.ad_duration_sec = float(data.get("ad_duration_sec")) if data.get("ad_duration_sec") is not None else None
+            self.ad_play_duration_sec = int(data.get("ad_play_duration_sec", 30))
 
             self.prayer_file = data.get("prayer_file") or None
             self.prayer_times = list(data.get("prayer_times", []))
@@ -394,6 +440,7 @@ class SchedulerState:
                 "ad_file": self.ad_file,
                 "ad_interval_sec": self.ad_interval_sec,
                 "ad_duration_sec": self.ad_duration_sec,
+                "ad_play_duration_sec": self.ad_play_duration_sec,
                 "prayer_file": self.prayer_file,
                 "prayer_times": self.prayer_times,
             }
@@ -412,9 +459,14 @@ class SchedulerState:
 def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
     """Periodically play advertisement track at a fixed interval.
 
-    Ensures that advertisements never overlap with prayer and only run
-    when a main track is currently playing.
+    Plays ad for user-specified duration (ad_play_duration_sec), then repeats
+    until main track changes or ends. When main track ends, picks another
+    random track from history and plays it.
+    Ensures that advertisements never overlap with prayer.
     """
+    # Track current main file to detect when it changes
+    current_main_file = None
+    
     while state.running:
         try:
             time.sleep(1)
@@ -422,14 +474,17 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 ad_file = state.ad_file
                 interval = state.ad_interval_sec
                 in_prayer = state.in_prayer
+                ad_play_duration = state.ad_play_duration_sec
+            
             if not ad_file or interval <= 0 or in_prayer:
                 continue
+                
             # Sleep in 1-second chunks so we can react quickly to prayer starting
             slept = 0
             while state.running and slept < interval:
                 time.sleep(1)
                 slept += 1
-                # If a prayer starts during the wait, abort this ad cycle
+                # If prayer starts during wait, abort this ad cycle
                 with state.lock:
                     if state.in_prayer or state.ad_file is None or state.ad_interval_sec <= 0:
                         slept = 0
@@ -441,6 +496,7 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 ad_file = state.ad_file
                 in_prayer = state.in_prayer
                 interval = state.ad_interval_sec
+                ad_play_duration = state.ad_play_duration_sec
             if not ad_file or interval <= 0 or in_prayer:
                 continue
 
@@ -450,26 +506,83 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                 continue
 
             if ad_file and os.path.exists(ad_file):
+                # Get current main file to track for changes
+                current_main_file = main_status.get("file")
                 ui.log(
-                    "Advertisement cycle: pausing main track for ad "
-                    f"({os.path.basename(ad_file)})"
+                    f"Advertisement cycle: pausing main track for ad "
+                    f"({os.path.basename(ad_file)}, {ad_play_duration}s per play)"
                 )
-                # Play ad as a tracked priority process so it can be stopped by prayer
-                # Use the probed duration (if available) so we honour the full ad
-                # length even if ffplay exits early.
-                with state.lock:
-                    ad_duration = state.ad_duration_sec
-                try:
-                    state.main_player.play_ad_blocking(ad_file, expected_duration=ad_duration)
-                finally:
-                    # Only resume main if not in prayer anymore
+                
+                # Play ad in repeat mode until main track ends or changes
+                while state.running:
+                    # Check if prayer started
                     with state.lock:
-                        in_prayer_now = state.in_prayer
-                    if not in_prayer_now:
-                        ui.log("Advertisement finished, resuming main track.")
-                        state.main_player.resume()
-                    else:
-                        ui.log("Advertisement interrupted by prayer; main track remains paused.")
+                        if state.in_prayer:
+                            break
+                    
+                    # Check main track status
+                    main_status = state.main_player.get_status()
+                    
+                    # If main track ended naturally, get another random track
+                    if main_status.get("finished") or not main_status.get("is_playing"):
+                        # Try to get another random track from history
+                        with state.lock:
+                            history = list(state.main_history)
+                            history_index = state.main_history_index
+                        
+                        if history and len(history) > 1:
+                            # Pick a random track different from current
+                            import random
+                            available_indices = [i for i in range(len(history)) if i != history_index]
+                            if available_indices:
+                                new_index = random.choice(available_indices)
+                                new_path, new_title = history[new_index]
+                                ui.log(f"Main track ended, auto-playing next: {new_title}")
+                                with state.lock:
+                                    state.main_history_index = new_index
+                                # Play the new track
+                                state.main_player.play_new(new_path)
+                                with state.lock:
+                                    state.main_title = new_title
+                                current_main_file = new_path
+                            else:
+                                # No other tracks available, stop ad cycle
+                                break
+                        else:
+                            # No history or only one track, stop ad cycle
+                            break
+                        
+                        # After starting new track, continue ad cycle
+                        main_status = state.main_player.get_status()
+                        if not main_status.get("is_playing"):
+                            break
+                    
+                    # Check if main track changed (user selected new track)
+                    if current_main_file and main_status.get("file") != current_main_file:
+                        current_main_file = main_status.get("file")
+                        # Continue ad cycle with new main track
+                    
+                    # Play ad for the specified duration
+                    try:
+                        # Use play_ad_timed to play ad for limited duration
+                        state.main_player.play_ad_timed(ad_file, ad_play_duration)
+                    except Exception as e:
+                        ui.log(f"Ad playback error: {e}")
+                        break
+                    
+                    # If we reach here, ad finished its duration, loop to repeat
+                    # Small delay between ad repeats
+                    time.sleep(0.5)
+                
+                # Ad cycle ended (prayer started or main track stopped/changed)
+                # Only resume main if not in prayer anymore
+                with state.lock:
+                    in_prayer_now = state.in_prayer
+                if not in_prayer_now:
+                    ui.log("Ad cycle ended, resuming main track.")
+                    state.main_player.resume()
+                else:
+                    ui.log("Ad cycle interrupted by prayer; main track remains paused.")
         except Exception as e:
             ui.log(f"Error in ad worker: {e}")
             time.sleep(2)
@@ -478,8 +591,13 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
 def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
     """Check every second and play prayer at configured times.
 
-    When a prayer starts, the main track (if any) is interrupted and will
-    resume automatically from the same position once the prayer finishes.
+    When a prayer starts:
+    - Stop BOTH main track AND advertisement immediately
+    - Play prayer track
+    
+    After prayer ends:
+    - Start main track first from history (or resume if was paused)
+    - Then ad_worker will resume the normal ad scheduling
     """
     while state.running:
         try:
@@ -501,35 +619,89 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     if os.path.exists(prayer_file):
                         ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
 
-                        # Wait for any currently playing advertisement to finish
-                        # so that ad tracks are never cut off.
-                        while True:
-                            with state.lock:
-                                priority_proc = getattr(state.main_player, "_priority_proc", None)
-                            if not priority_proc or priority_proc.poll() is not None:
-                                break
-                            time.sleep(0.5)
+                        # STOP advertisement immediately (don't wait for it to finish)
+                        ui.log("Stopping advertisement track for prayer.")
+                        state.main_player.stop_priority()
 
                         # Mark that a prayer is in progress so new ads do not start
                         with state.lock:
                             state.prayer_last_run[t] = today
                             state.in_prayer = True
+                        
+                        # Store main track info for potential restart after prayer
+                        main_was_playing = False
+                        main_path_before = None
+                        main_title_before = None
+                        
+                        # Get current main track info before pausing
+                        main_status = state.main_player.get_status()
+                        if main_status.get("is_playing"):
+                            main_was_playing = True
+                            main_path_before = main_status.get("file")
+                            with state.lock:
+                                if state.main_title:
+                                    main_title_before = state.main_title
+                        
                         try:
-                            # Pause main track explicitly so only prayer plays
-                            ui.log("Pausing main track for prayer.")
-                            state.main_player.pause()
+                            # Pause (stop) main track explicitly so only prayer plays
+                            if main_was_playing:
+                                ui.log("Pausing main track for prayer.")
+                                state.main_player.pause()
+                            
                             # Play prayer track fully (blocking) without touching main state
                             ui.log("Starting prayer track.")
                             play_with_ffplay(prayer_file)
-                            ui.log("Prayer track finished, attempting to resume main track (if it was playing before).")
-                            state.main_player.resume()
+                            
+                            ui.log("Prayer track finished.")
                         except Exception as e:
                             ui.log(f"Prayer playback error: {e}")
                         finally:
                             # Allow ads again after prayer finishes
                             with state.lock:
                                 state.in_prayer = False
-                                ui.log("Prayer finished, advertisements allowed again.")
+                            
+                            ui.log("Prayer finished, restarting main track.")
+                            
+                            # START main track first (play from history or resume)
+                            if main_was_playing and main_path_before:
+                                # Try to resume from saved position
+                                state.main_player.resume()
+                                # If resume didn't work (track was cleared), play from history
+                                status_after = state.main_player.get_status()
+                                if not status_after.get("is_playing"):
+                                    # Need to play from history
+                                    with state.lock:
+                                        history = list(state.main_history)
+                                        history_index = state.main_history_index
+                                    
+                                    if history and history_index is not None and history_index < len(history):
+                                        path, title = history[history_index]
+                                        ui.log(f"Restarting main track: {title}")
+                                        state.main_player.play_new(path)
+                                    elif history:
+                                        # Play first track in history
+                                        path, title = history[0]
+                                        ui.log(f"Restarting main track: {title}")
+                                        state.main_player.play_new(path)
+                                        with state.lock:
+                                            state.main_history_index = 0
+                            elif main_path_before:
+                                # Main was stopped during prayer, play it again
+                                ui.log(f"Restarting main track: {main_title_before or os.path.basename(main_path_before)}")
+                                state.main_player.play_new(main_path_before)
+                            else:
+                                # No main track was playing, try to get from history
+                                with state.lock:
+                                    history = list(state.main_history)
+                                
+                                if history:
+                                    path, title = history[0]
+                                    ui.log(f"Starting main track: {title}")
+                                    state.main_player.play_new(path)
+                                    with state.lock:
+                                        state.main_history_index = 0
+                            
+                            ui.log("Main track started, advertisements will resume on next cycle.")
         except Exception as e:
             ui.log(f"Error in prayer worker: {e}")
             time.sleep(2)
@@ -662,6 +834,17 @@ class MainWindow:
         btn_apply_interval = tk.Button(ad_frame, text="Apply Interval", command=self.apply_interval)
         btn_apply_interval.pack(anchor="w")
 
+        # New: Ad play duration control
+        duration_frame = tk.Frame(ad_frame)
+        duration_frame.pack(anchor="w", pady=5)
+        tk.Label(duration_frame, text="Play for").pack(side="left")
+        self.ad_duration_var = tk.StringVar(value="30")
+        dur_entry = tk.Entry(duration_frame, width=6, textvariable=self.ad_duration_var)
+        dur_entry.pack(side="left", padx=5)
+        tk.Label(duration_frame, text="seconds each time").pack(side="left")
+        btn_apply_duration = tk.Button(ad_frame, text="Apply Ad Duration", command=self.apply_ad_duration)
+        btn_apply_duration.pack(anchor="w")
+
         # --- Prayer section ---
         prayer_frame = tk.LabelFrame(left_frame, text="Prayer Settings", padx=10, pady=10)
         prayer_frame.pack(fill="x", padx=10, pady=5)
@@ -710,10 +893,11 @@ class MainWindow:
     # ----- UI actions -----
 
     def _load_state_into_ui(self) -> None:
-        """Populate labels, interval and times from persisted state."""
+        """Populate labels, interval, duration and times from persisted state."""
         with self.state.lock:
             ad_file = self.state.ad_file
             ad_interval_sec = self.state.ad_interval_sec
+            ad_play_duration = self.state.ad_play_duration_sec
             prayer_file = self.state.prayer_file
             prayer_times = list(self.state.prayer_times)
 
@@ -723,6 +907,7 @@ class MainWindow:
         else:
             self.ad_label.config(text="No advertisement track selected")
         self.ad_interval_var.set(str(ad_interval_sec))
+        self.ad_duration_var.set(str(ad_play_duration))
 
         # Prayer UI
         if prayer_file:
@@ -935,6 +1120,20 @@ class MainWindow:
             self.state.ad_interval_sec = value
         self.state.save_to_disk()
         self.log(f"Advertisement interval set to {value} seconds")
+
+    def apply_ad_duration(self) -> None:
+        """Apply the ad play duration setting."""
+        try:
+            value = int(self.ad_duration_var.get())
+            if value <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid duration", "Please enter a positive integer number of seconds.")
+            return
+        with self.state.lock:
+            self.state.ad_play_duration_sec = value
+        self.state.save_to_disk()
+        self.log(f"Advertisement play duration set to {value} seconds per play")
 
     def select_prayer_track(self) -> None:
         path = filedialog.askopenfilename(
