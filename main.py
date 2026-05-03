@@ -37,7 +37,6 @@ def _get_db_path():
 
 def get_db_connection():
     """Get a database connection using Supabase Postgres."""
-    # Try Supabase Postgres first
     db_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or os.environ.get('POSTGRES_URL_NON_POOLING', '')
     
     if db_url and db_url.startswith('postgres'):
@@ -57,6 +56,74 @@ def get_db_connection():
         return conn
     except Exception as e:
         print(f"SQLite connection error: {e}")
+        return None
+
+# ===============================
+# Supabase REST API for track storage
+# ===============================
+import urllib.request
+import urllib.parse
+import json
+
+def get_supabase_url():
+    """Get Supabase REST URL."""
+    return os.environ.get('NEXT_PUBLIC_SUPABASE_URL') or os.environ.get('SUPABASE_URL', '')
+
+def get_supabase_key():
+    """Get Supabase anon key."""
+    return os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY') or os.environ.get('SUPABASE_ANON_KEY', '')
+
+def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', duration_sec: int = 0):
+    """Save track info via Supabase REST API."""
+    try:
+        supabase_url = get_supabase_url()
+        supabase_key = get_supabase_key()
+        
+        if not supabase_url or not supabase_key:
+            return False
+        
+        url = f"{supabase_url}/rest/v1/tracks"
+        data = json.dumps({
+            "track_type": track_type,
+            "filename": filename,
+            "filepath": filepath,
+            "duration_sec": duration_sec
+        }).encode()
+        
+        req = urllib.request.Request(url, data=data, headers={
+            'Content-Type': 'application/json',
+            'apikey': supabase_key,
+            'Authorization': f'Bearer {supabase_key}',
+            'Prefer': 'resolution=merge-duplicates'
+        }, method='POST')
+        
+        with urllib.request.urlopen(req) as resp:
+            return resp.status in (200, 201)
+    except Exception as e:
+        print(f"Supabase save error: {e}")
+        return False
+
+def get_track_from_supabase(track_type: str):
+    """Get track info via Supabase REST API."""
+    try:
+        supabase_url = get_supabase_url()
+        supabase_key = get_supabase_key()
+        
+        if not supabase_url or not supabase_key:
+            return None
+        
+        url = f"{supabase_url}/rest/v1/tracks?track_type=eq.{urllib.parse.quote(track_type)}&limit=1"
+        
+        req = urllib.request.Request(url, headers={
+            'apikey': supabase_key,
+            'Authorization': f'Bearer {supabase_key}'
+        })
+        
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
+            return data[0] if data else None
+    except Exception as e:
+        print(f"Supabase get error: {e}")
         return None
 
 def is_db_available() -> bool:
@@ -355,34 +422,44 @@ def api_upload_file():
         result = {'url': f'/api/uploads/{filename}', 'title': filename}
         
         # Try to save to database
+        saved = False
         if track_type:
+            # Try Supabase REST API first (no psycopg2 needed)
             try:
-                conn = get_db_connection()
-                if conn is not None:
-                    cursor = conn.cursor()
-                    cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
-                    existing = cursor.fetchone()
-                    
-                    if existing:
-                        cursor.execute('''
-                            UPDATE tracks 
-                            SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
-                            WHERE track_type = ?
-                        ''', (filename, save_path, track_type))
-                    else:
-                        cursor.execute('''
-                            INSERT INTO tracks (track_type, filename, filepath)
-                            VALUES (?, ?, ?)
-                        ''', (track_type, filename, save_path))
-                    
-                    conn.commit()
-                    conn.close()
+                if save_track_to_supabase(track_type, filename, save_path, 0):
+                    saved = True
                     result['track_type'] = track_type
                     result['saved_to_db'] = True
+                    print(f"Saved to Supabase: {track_type}")
             except Exception as e:
-                result['track_type'] = track_type
-                result['saved_to_db'] = False
-                print(f"DB save error: {e}")
+                print(f"Supabase save error: {e}")
+            
+            # If Supabase didn't work, try Postgres connection
+            if not saved:
+                try:
+                    conn = get_db_connection()
+                    if conn is not None:
+                        cursor = conn.cursor()
+                        db_url = os.environ.get('POSTGRES_URL', '')
+                        if db_url.startswith('postgres'):
+                            # PostgreSQL
+                            cursor.execute('''INSERT INTO tracks (track_type, filename, filepath) VALUES (%s, %s, %s) ON CONFLICT (track_type) DO UPDATE SET filename = %s, filepath = %s, updated_at = CURRENT_TIMESTAMP''', (track_type, filename, save_path, filename, save_path))
+                        else:
+                            # SQLite
+                            cursor.execute('SELECT id FROM tracks WHERE track_type = %s', (track_type,))
+                            existing = cursor.fetchone()
+                            if existing:
+                                cursor.execute('UPDATE tracks SET filename = %s, filepath = %s, updated_at = CURRENT_TIMESTAMP WHERE track_type = %s', (filename, save_path, track_type))
+                            else:
+                                cursor.execute('INSERT INTO tracks (track_type, filename, filepath) VALUES (%s, %s, %s)', (track_type, filename, save_path))
+                        conn.commit()
+                        conn.close()
+                        saved = True
+                        result['track_type'] = track_type
+                        result['saved_to_db'] = True
+                except Exception as e:
+                    print(f"DB save error: {e}")
+                    result['saved_to_db'] = False
         
         return jsonify(result)
     except Exception as e:
@@ -579,24 +656,49 @@ def get_settings():
 @app.route('/api/track_info/<track_type>', methods=['GET'])
 def get_track_info(track_type):
     """Get track info (filename, url) for frontend."""
+    # Try Supabase REST API first
+    try:
+        track = get_track_from_supabase(track_type)
+        if track:
+            return jsonify({
+                'found': True,
+                'filename': track.get('filename'),
+                'filepath': track.get('filepath'),
+                'duration_sec': track.get('duration_sec', 0),
+                'url': '/api/uploads/' + str(track.get('filename'))
+            })
+    except Exception as e:
+        print(f"Supabase get error: {e}")
+    
+    # Fallback to database connection
     conn = get_db_connection()
     if conn is None:
-        return jsonify({'found': False})  # Return valid JSON, not error
+        return jsonify({'found': False})
     
     cursor = conn.cursor()
-    cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = ?', (track_type,))
+    db_url = os.environ.get('POSTGRES_URL', '')
+    
+    if db_url.startswith('postgres'):
+        cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = %s', (track_type,))
+    else:
+        cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = %s', (track_type,))
+    
     row = cursor.fetchone()
     conn.close()
     
     if row is None:
         return jsonify({'found': False})
     
+    filename = row[0] if isinstance(row, tuple) else row['filename']
+    filepath = row[1] if isinstance(row, tuple) else row['filepath']
+    duration_sec = row[2] if isinstance(row, tuple) else row['duration_sec']
+    
     return jsonify({
         'found': True,
-        'filename': row['filename'],
-        'filepath': row['filepath'],
-        'duration_sec': row['duration_sec'],
-        'url': '/api/uploads/' + str(row['filename'])
+        'filename': filename,
+        'filepath': filepath,
+        'duration_sec': duration_sec,
+        'url': '/api/uploads/' + str(filename)
     })
 
 @app.route('/api/settings/ad', methods=['POST'])
