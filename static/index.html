@@ -368,6 +368,7 @@
             <label>Duration (seconds):</label>
             <input type="number" id="advt-duration" value="30" min="5">
         </div>
+        <button onclick="saveAdSettings()">Save Settings</button>
         <div class="setting-controls">
             <button class="ctrl-btn play" onclick="playAdvt()">▶</button>
             <button class="ctrl-btn pause" onclick="pauseAdvt()">⏸</button>
@@ -397,6 +398,7 @@
             <label>Prayer times (HH:MM):</label>
             <input type="text" id="prayer-times" placeholder="06:00,12:00,18:00">
         </div>
+        <button onclick="savePrayerSettings()">Save Settings</button>
         <div class="setting-controls">
             <button class="ctrl-btn play" onclick="playPrayer()">▶</button>
             <button class="ctrl-btn pause" onclick="pausePrayer()">⏸</button>
@@ -751,6 +753,61 @@
             } catch(e) {
                 console.error(e);
                 alert('Failed to upload: ' + e);
+            }
+        }
+        
+        // Save Ad Settings
+        async function saveAdSettings() {
+            try {
+                var interval = parseInt(document.getElementById('advt-interval').value) || 300;
+                var duration = parseInt(document.getElementById('advt-duration').value) || 30;
+                
+                var formData = new FormData();
+                formData.append('interval_sec', interval);
+                formData.append('play_duration_sec', duration);
+                
+                var response = await fetch('/api/settings/ad', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({interval_sec: interval, play_duration_sec: duration})
+                });
+                
+                var result = await response.json();
+                if (result.success) {
+                    alert('Settings saved!');
+                    startAdvtTimer(); // Restart with new settings
+                } else {
+                    alert('Failed to save: ' + result.error);
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Failed to save: ' + e);
+            }
+        }
+        
+        // Save Prayer Settings
+        async function savePrayerSettings() {
+            try {
+                var prayerTimesEl = document.getElementById('prayer-times');
+                var times = prayerTimesEl.value;
+                
+                var response = await fetch('/api/settings/prayer', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({prayer_times: times})
+                });
+                
+                var result = await response.json();
+                if (result.success) {
+                    alert('Settings saved!');
+                    prayerTimes = times.split(',').map(t => t.trim());
+                    startPrayerChecker(); // Restart with new times
+                } else {
+                    alert('Failed to save: ' + result.error);
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Failed to save: ' + e);
             }
         }
         

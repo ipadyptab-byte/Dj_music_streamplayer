@@ -769,25 +769,83 @@ def save_ad_settings():
 @app.route('/api/settings/ad', methods=['GET'])
 def get_ad_settings():
     """Get ad interval and duration from database."""
+    # Try Supabase first
+    try:
+        track = get_track_from_supabase('ad')
+        if track:
+            return jsonify({
+                'interval': track.get('interval_sec', 180),
+                'duration': track.get('duration_sec', 30)
+            })
+    except:
+        pass
+    
     conn = get_db_connection()
     if conn is None:
         return jsonify({'interval': 180, 'duration': 30})
     
     cursor = conn.cursor()
-    
-    # Get interval
-    cursor.execute("SELECT duration_sec FROM tracks WHERE track_type = 'ad_interval'")
-    row = cursor.fetchone()
-    interval = row['duration_sec'] if row else 180
-    
-    # Get play duration from ad track
     cursor.execute("SELECT duration_sec FROM tracks WHERE track_type = 'ad'")
     row = cursor.fetchone()
     duration = row['duration_sec'] if row else 30
     
     conn.close()
     
-    return jsonify({'interval': interval, 'duration': duration})
+    return jsonify({'interval': 180, 'duration': duration})
+
+@app.route('/api/settings/prayer', methods=['POST'])
+def save_prayer_settings():
+    """Save prayer times to database."""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    prayer_times = data.get('prayer_times', '')
+    track_type = 'prayer'
+    
+    # Save to Supabase
+    try:
+        if save_track_to_supabase(track_type, '', '', 0, prayer_times):
+            return jsonify({'success': True})
+    except:
+        pass
+    
+    # Fallback to database
+    try:
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute('''INSERT INTO tracks (track_type, filename, filepath, duration_sec) VALUES (%s, %s, %s, %s) ON CONFLICT (track_type) DO UPDATE SET filepath = %s''', (track_type, '', '', prayer_times, prayer_times))
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+    except:
+        pass
+    
+    return jsonify({'success': False, 'error': 'No database'}), 400
+
+@app.route('/api/settings/prayer', methods=['GET'])
+def get_prayer_settings():
+    """Get prayer times from database."""
+    try:
+        track = get_track_from_supabase('prayer')
+        if track:
+            return jsonify({'times': track.get('filepath', '')})
+    except:
+        pass
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'times': ''})
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT filepath FROM tracks WHERE track_type = 'prayer'")
+    row = cursor.fetchone()
+    times = row['filepath'] if row else ''
+    
+    conn.close()
+    
+    return jsonify({'times': times})
 
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
