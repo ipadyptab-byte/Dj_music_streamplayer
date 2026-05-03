@@ -87,32 +87,43 @@ def get_s3_credentials():
     }
 
 def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
-    """Upload file to Supabase Storage via S3 and return public URL."""
+    """Upload file to Supabase Storage via S3."""
     try:
+        import boto3
+        from botocore.config import Config
+        
         creds = get_s3_credentials()
-        
         supabase_url = get_supabase_url()
-        service_key = get_service_key()
         
-        if not supabase_url or not service_key:
-            print("No Supabase config")
-            return None
+        # Create S3 client
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=creds['access_key'],
+            aws_secret_access_key=creds['secret_key'],
+            region_name=creds['region'],
+            config=Config(signature_version='s3v4')
+        )
         
-        # Upload via Storage API
-        url = f"{supabase_url}/storage/v1/object/{creds['bucket']}/{filename}"
+        # Use the full S3 endpoint from Supabase
+        bucket = 'tracks'
         
-        req = urllib.request.Request(url, data=file_data, headers={
-            'Content-Type': 'audio/mpeg',
-            'Authorization': f'Bearer {service_key}',
-            'x-upsert': 'true'
-        }, method='POST')
+        s3_client.put_object(
+            Bucket='bspqpazygolpzfykckip',
+            Key=f'tracks/{filename}',
+            Body=file_data,
+            ContentType='audio/mpeg',
+            ACL='public-read'
+        )
         
-        with urllib.request.urlopen(req) as resp:
-            if resp.getcode() in (200, 201):
-                return f"{supabase_url}/storage/v1/object/public/{creds['bucket']}/{filename}"
+        # Return Supabase storage URL
+        return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
+        
+    except ImportError:
+        print("boto3 not installed")
     except Exception as e:
-        print(f"Storage upload error: {e}")
-        return None
+        print(f"S3 upload error: {e}")
+    
+    return None
 
 def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', duration_sec: int = 0, file_url: str = ''):
     """Save track info via Supabase REST API."""
