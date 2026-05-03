@@ -745,7 +745,6 @@
             // Validate file type
             let fileType = file.type;
             if (!fileType) {
-                // Try to detect from extension
                 const ext = file.name.split('.').pop().toLowerCase();
                 if (ext === 'mp3') fileType = 'audio/mpeg';
                 else if (ext === 'wav') fileType = 'audio/wav';
@@ -765,8 +764,9 @@
             
             console.log('File:', file.name, 'type:', fileType, 'size:', file.size);
             
-            // Create blob with explicit type
-            const blob = new Blob([file], { type: fileType });
+            // Read file and create proper Blob
+            const arrayBuffer = await file.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: fileType });
             const objectUrl = URL.createObjectURL(blob);
             
             advtTrack = { 
@@ -809,8 +809,9 @@
                 return;
             }
             
-            // Create blob with explicit type
-            const blob = new Blob([file], { type: fileType });
+            // Read file and create proper Blob
+            const arrayBuffer = await file.arrayBuffer();
+            const blob = new Blob([arrayBuffer], { type: fileType });
             const objectUrl = URL.createObjectURL(blob);
             
             prayerTrack = { 
