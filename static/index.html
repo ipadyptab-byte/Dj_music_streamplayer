@@ -718,68 +718,50 @@
             } catch(e) { console.error(e); }
         }
         
-        // Upload advt file - saves to database
+        // Upload advt file - use Blob URL (browser memory)
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Upload to server with track_type
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('track_type', 'ad');
+            // Create Blob URL for local playback
+            const objectUrl = URL.createObjectURL(file);
             
-            try {
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.url) {
-                    advtTrack = { title: data.title, url: data.url, platform: 'Local' };
-                    var statusEl = document.getElementById('advt-status');
-                    if (statusEl) statusEl.innerText = 'Advt: ' + advtTrack.title;
-                    alert('Advt track saved to database!');
-                    if (advtTrack) startAdvtTimer();
-                }
-            } catch(e) {
-                console.error(e);
-                alert('Failed to upload: ' + e);
-            }
+            advtTrack = { 
+                title: file.name, 
+                url: objectUrl, 
+                platform: 'Local',
+                isBlob: true 
+            };
+            
+            var statusEl = document.getElementById('advt-status');
+            if (statusEl) statusEl.innerText = 'Advt: ' + advtTrack.title;
+            alert('Advt track loaded!');
+            
+            startAdvtTimer();
         }
         
-        // Upload prayer file - saves to database
+        // Upload prayer file - use Blob URL (browser memory)
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
-            var prayerTimesEl = document.getElementById('prayer-times');
-            prayerTimes = prayerTimesEl ? prayerTimesEl.value.split(',').map(t => t.trim()) : [];
             
-            // Upload to server with track_type
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('track_type', 'prayer');
+            // Create Blob URL for local playback
+            const objectUrl = URL.createObjectURL(file);
             
-            try {
-                const response = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json();
-                
-                if (data.url) {
-                    prayerTrack = { title: data.title, url: data.url, platform: 'Local' };
-                    var statusEl = document.getElementById('prayer-status');
-                    if (statusEl) statusEl.innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-                    alert('Prayer track saved to database!');
-                    if (prayerTrack) startPrayerChecker();
-                }
-            } catch(e) {
-                console.error(e);
-                alert('Failed to upload: ' + e);
-            }
+            prayerTrack = { 
+                title: file.name, 
+                url: objectUrl, 
+                platform: 'Local',
+                isBlob: true 
+            };
+            
+            var statusEl = document.getElementById('prayer-status');
+            if (statusEl) statusEl.innerText = 'Prayer: ' + prayerTrack.title;
+            alert('Prayer track loaded!');
+            
+            startPrayerChecker();
         }
         
         // Save Ad Settings
