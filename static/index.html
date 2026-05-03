@@ -814,8 +814,15 @@
         function fileToDataURL(file, mimeType) {
             return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
+                reader.onload = function() {
+                    console.log('FileReader result type:', typeof reader.result);
+                    console.log('FileReader starts:', reader.result.substring(0, 50));
+                    resolve(reader.result);
+                };
+                reader.onerror = function(e) {
+                    console.error('FileReader error:', e);
+                    reject(e);
+                };
                 reader.readAsDataURL(file);
             });
         }
