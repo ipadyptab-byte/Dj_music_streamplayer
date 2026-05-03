@@ -73,7 +73,50 @@ def get_supabase_key():
     """Get Supabase anon key."""
     return os.environ.get('NEXT_PUBLIC_SUPABASE_ANON_KEY') or os.environ.get('SUPABASE_ANON_KEY', '')
 
-def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', duration_sec: int = 0):
+def get_service_key():
+    """Get Supabase service key (for admin operations)."""
+    return os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or os.environ.get('SUPABASE_SECRET_KEY', '')
+
+def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
+    """Upload file to Supabase Storage and return public URL."""
+    try:
+        supabase_url = get_supabase_url()
+        service_key = get_service_key()
+        
+        if not supabase_url or not service_key:
+            print("No Supabase config for storage")
+            return None
+        
+        # Create bucket if not exists
+        bucket_url = f"{supabase_url}/storage/v1/bucket"
+        # Try to create bucket
+        bucket_data = json.dumps({"id": "tracks", "name": "Tracks", "public": True}).encode()
+        bucket_req = urllib.request.Request(bucket_url, data=bucket_data, headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {service_key}'
+        }, method='POST')
+        try:
+            urllib.request.urlopen(bucket_req)
+        except:
+            pass  # Bucket may already exist
+        
+        # Upload file
+        storage_url = f"{supabase_url}/storage/v1/object/tracks/{filename}"
+        req = urllib.request.Request(storage_url, data=file_data, headers={
+            'Content-Type': 'audio/mpeg',
+            'Authorization': f'Bearer {service_key}',
+            'x-upsert': 'true'
+        }, method='POST')
+        
+        with urllib.request.urlopen(req) as resp:
+            if resp.getcode() in (200, 201):
+                # Return public URL
+                return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
+    except Exception as e:
+        print(f"Storage upload error: {e}")
+        return None
+
+def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', duration_sec: int = 0, file_url: str = ''):
     """Save track info via Supabase REST API."""
     try:
         supabase_url = get_supabase_url()
@@ -85,12 +128,12 @@ def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', d
         
         url = f"{supabase_url}/rest/v1/tracks"
         
-        # Use PUT for upsert with track_type as unique constraint
         data = json.dumps({
             "track_type": track_type,
             "filename": filename,
             "filepath": filepath,
-            "duration_sec": duration_sec
+            "duration_sec": duration_sec,
+            "file_url": file_url
         }).encode()
         
         req = urllib.request.Request(url, data=data, headers={
@@ -106,7 +149,6 @@ def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', d
             return status in (200, 201)
     except urllib.error.HTTPError as e:
         print(f"HTTP Error: {e.code} - {e.reason}")
-        # If 406, table doesn't exist or RLS issue
         return False
     except Exception as e:
         print(f"Supabase save error: {e}")
@@ -404,7 +446,7 @@ def play():
         return jsonify({'error': 'Unknown platform. Please use YouTube or upload local file.'}), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
-    """Upload a file - saves track info only (not file) for Vercel."""
+    """Upload a file to Supabase Storage + save track info."""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
@@ -415,17 +457,28 @@ def api_upload_file():
         track_type = request.form.get('track_type')
         filename = secure_filename(file.filename)
         
-        # On Vercel, we can't save files - just save track info to DB
-        result = {'url': '', 'title': filename}
-        result['note'] = 'File will be re-uploaded each session. Track info saved to database.'
+        # Read file data
+        file_data = file.read()
         
-        # Save track info to Supabase
+        # Upload file to Supabase Storage
+        file_url = upload_file_to_supabase_storage(filename, file_data)
+        
+        result = {'title': filename}
+        
+        if file_url:
+            result['url'] = file_url
+            print(f"File uploaded to: {file_url}")
+        else:
+            result['url'] = ''
+            print("File upload failed, but trying to save track info...")
+        
+        # Save track info to Supabase (with file_url if available)
         if track_type:
             try:
-                if save_track_to_supabase(track_type, filename, '', 0):
+                if save_track_to_supabase(track_type, filename, '', 0, file_url or ''):
                     result['track_type'] = track_type
                     result['saved_to_db'] = True
-                    print(f"Saved to Supabase: {track_type}")
+                    print(f"Track info saved to Supabase: {track_type}")
                 else:
                     result['saved_to_db'] = False
             except Exception as e:
@@ -631,15 +684,24 @@ def get_track_info(track_type):
     try:
         track = get_track_from_supabase(track_type)
         if track:
+            # Use file_url from storage if available, otherwise build URL from filename
+            file_url = track.get('file_url')
+            if not file_url and track.get('filename'):
+                # Build URL from Supabase storage
+                supabase_url = get_supabase_url()
+                file_url = f"{supabase_url}/storage/v1/object/public/tracks/{track.get('filename')}"
+            
             return jsonify({
                 'found': True,
                 'filename': track.get('filename'),
                 'filepath': track.get('filepath'),
                 'duration_sec': track.get('duration_sec', 0),
-                'url': '/api/uploads/' + str(track.get('filename'))
+                'url': file_url or ''
             })
     except Exception as e:
         print(f"Supabase get error: {e}")
+    
+    # Fallback to database connection (omitted for brevity)
     
     # Fallback to database connection
     conn = get_db_connection()
