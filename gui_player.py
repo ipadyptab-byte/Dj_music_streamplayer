@@ -20,20 +20,39 @@ from main import UPLOAD_FOLDER, search_all_platforms, get_audio_url
 # Low-level audio playback
 # ---------------------------
 
+# Global volume level (shared by all tracks)
+GLOBAL_VOLUME = 80.0  # Default volume (0-100)
+
+def set_global_volume(volume: float) -> None:
+    """Set global volume for all tracks."""
+    global GLOBAL_VOLUME
+    GLOBAL_VOLUME = max(0, min(100, volume))
+
+def get_global_volume() -> float:
+    """Get current global volume."""
+    return GLOBAL_VOLUME
+
+
 def play_with_ffplay(path: str) -> None:
     """Play an audio file using ffplay (part of ffmpeg).
 
     This is blocking, so it must be run in a background thread.
+    Uses global volume for consistent audio across all tracks.
     """
     try:
         # On Windows, prevent a console window from popping up for ffplay.
         creationflags = 0
         if platform.system() == "Windows":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        
+        # Apply volume filter for consistent audio level
+        vol_filter = f"volume={GLOBAL_VOLUME * 0.5}dB"
+        
         subprocess.run([
             "ffplay",
             "-nodisp",
             "-autoexit",
+            "-af", vol_filter,
             path,
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
     except FileNotFoundError:
@@ -50,6 +69,9 @@ class MainTrackPlayer:
     been played. When a higher‑priority track (prayer) needs to play,
     we stop the main track, remember the elapsed time and later resume
     it from that position using ffplay's -ss seek option.
+    
+    Volume control: All tracks (main, ad, prayer) use the same volume level
+    for consistent audio experience.
     """
 
     def __init__(self) -> None:
@@ -59,25 +81,50 @@ class MainTrackPlayer:
         self._offset_sec: float = 0.0
         self._start_monotonic: float | None = None
         self._stop_reason: str | None = None
+        # Volume level (0-100), same for all tracks
+        self._volume: float = 80.0
+    
+    def set_volume(self, volume: float) -> None:
+        """Set volume level (0-100) for all tracks."""
+        self._volume = max(0, min(100, volume))
+    
+    def get_volume(self) -> float:
+        """Get current volume level."""
+        return self._volume
 
-    def _start_ffplay(self, path: str, offset_sec: float, *, normalize: bool = True) -> subprocess.Popen:
-        """Start ffplay.
+    def _start_ffplay(self, path: str, offset_sec: float, *, normalize: bool = True, use_volume: bool = True) -> subprocess.Popen:
+        """Start ffplay with consistent volume for all tracks.
 
         By default we apply dynamic normalization (dynaudnorm) so tracks have
         similar loudness. For short advertisement jingles this filter has
         sometimes caused early termination with certain files, so ads can
         request normalize=False to play them as‑is.
+        
+        Volume is controlled via -af volume filter or -af volumedetect for consistent
+        audio level across all track types.
         """
         cmd = [
             "ffplay",
             "-nodisp",
             "-autoexit",
         ]
+        
         if normalize:
             cmd += [
                 "-af",
                 "dynaudnorm",  # dynamic audio normalization filter
             ]
+        
+        # Apply consistent volume for all tracks (main, ad, prayer)
+        if use_volume:
+            # Use volume filter to get consistent audio level
+            vol_filter = f"volume={self._volume * 0.5}dB"  # Convert 0-100 to dB
+            if normalize:
+                # Append to existing filter
+                cmd[-1] = cmd[-1] + f",{vol_filter}"
+            else:
+                cmd += ["-af", vol_filter]
+        
         if offset_sec > 0:
             cmd += ["-ss", str(offset_sec)]
         cmd.append(path)
@@ -108,7 +155,7 @@ class MainTrackPlayer:
                 self._stop_reason = "stop"
                 self._proc.terminate()
             # Main tracks keep normalization
-            self._proc = self._start_ffplay(path, 0.0, normalize=True)
+            self._proc = self._start_ffplay(path, 0.0, normalize=True, use_volume=True)
             self._current_file = path
             self._offset_sec = 0.0
             self._start_monotonic = time.monotonic()
@@ -135,7 +182,7 @@ class MainTrackPlayer:
                 self._proc = None
         # Now start the priority track (ads play without normalization to avoid
         # any interaction between dynaudnorm and short jingle files)
-        proc = self._start_ffplay(path, 0.0, normalize=False)
+        proc = self._start_ffplay(path, 0.0, normalize=False, use_volume=True)
         with self._lock:
             self._priority_proc = proc
         try:
@@ -176,7 +223,7 @@ class MainTrackPlayer:
                 # If a new main track wasn't started in the meantime,
                 # resume the previous one.
                 if self._current_file is None or self._current_file == main_to_resume:
-                    self._proc = self._start_ffplay(main_to_resume, resume_offset)
+                    self._proc = self._start_ffplay(main_to_resume, resume_offset, use_volume=True)
                     self._current_file = main_to_resume
                     self._start_monotonic = time.monotonic()
                     self._offset_sec = resume_offset
@@ -207,7 +254,7 @@ class MainTrackPlayer:
         """Resume the main track if paused."""
         with self._lock:
             if self._current_file and (self._proc is None or self._proc.poll() is not None):
-                self._proc = self._start_ffplay(self._current_file, self._offset_sec)
+                self._proc = self._start_ffplay(self._current_file, self._offset_sec, use_volume=True)
                 self._start_monotonic = time.monotonic()
                 self._stop_reason = None
 
@@ -237,7 +284,7 @@ class MainTrackPlayer:
                 self._proc = None
         # Start ad as a tracked priority process (no normalization)
         start_ts = time.monotonic()
-        proc = self._start_ffplay(path, 0.0, normalize=False)
+        proc = self._start_ffplay(path, 0.0, normalize=False, use_volume=True)
         with self._lock:
             self._priority_proc = proc
         try:
@@ -278,7 +325,7 @@ class MainTrackPlayer:
         
         # Start ad as a tracked priority process (no normalization)
         start_ts = time.monotonic()
-        proc = self._start_ffplay(path, 0.0, normalize=False)
+        proc = self._start_ffplay(path, 0.0, normalize=False, use_volume=True)
         with self._lock:
             self._priority_proc = proc
         
@@ -806,6 +853,7 @@ def play_with_ffplay_timed(path: str) -> float | None:
     """Play an audio file and return the elapsed time in seconds.
     
     Returns the actual duration played, or None if the file doesn't exist.
+    Uses global volume for consistent audio across all tracks.
     """
     if not os.path.exists(path):
         return None
@@ -817,10 +865,15 @@ def play_with_ffplay_timed(path: str) -> float | None:
         creationflags = 0
         if platform.system() == "Windows":
             creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        
+        # Apply volume filter for consistent audio level
+        vol_filter = f"volume={GLOBAL_VOLUME * 0.5}dB"
+        
         subprocess.run([
             "ffplay",
             "-nodisp",
             "-autoexit",
+            "-af", vol_filter,
             path,
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
         # Process finished naturally
@@ -908,6 +961,18 @@ class MainWindow:
             except Exception:
                 # If logo fails to load, ignore and continue
                 pass
+
+        # --- Volume Control (shared for all tracks) ---
+        volume_frame = tk.LabelFrame(left_frame, text="Volume Control", padx=10, pady=10)
+        volume_frame.pack(fill="x", padx=10, pady=5)
+        
+        self.volume_var = tk.IntVar(value=int(GLOBAL_VOLUME))
+        volume_scale = tk.Scale(volume_frame, from_=0, to=100, orient="horizontal",
+                            variable=self.volume_var, label="Volume (%)",
+                            command=self._on_volume_change)
+        volume_scale.pack(fill="x", padx=10)
+        self.volume_label = tk.Label(volume_frame, text=f"Volume: {int(GLOBAL_VOLUME)}%")
+        self.volume_label.pack()
 
         # --- Clock ---
         self.clock_label = tk.Label(left_frame, text="--:--:--", font=("TkDefaultFont", 12))
@@ -1046,8 +1111,21 @@ class MainWindow:
 
     # ----- UI actions -----
 
+    def _on_volume_change(self, value: str) -> None:
+        """Handle volume slider change."""
+        vol = int(value)
+        set_global_volume(vol)
+        self.volume_label.config(text=f"Volume: {vol}%")
+        
+        # Also update MainTrackPlayer volume
+        self.state.main_player.set_volume(vol)
+
     def _load_state_into_ui(self) -> None:
         """Populate labels, interval, duration and times from persisted state."""
+        # Also load volume
+        self.volume_var.set(int(GLOBAL_VOLUME))
+        self.volume_label.config(text=f"Volume: {int(GLOBAL_VOLUME)}%")
+        
         with self.state.lock:
             ad_file = self.state.ad_file
             ad_interval_sec = self.state.ad_interval_sec
