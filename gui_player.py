@@ -460,6 +460,7 @@ class SchedulerState:
 
     def _load_from_database(self) -> None:
         """Load settings from database on startup (if available)."""
+        # First try via API (works if Flask is running), else fallback to direct SQLite
         try:
             import urllib.request
             import urllib.parse
@@ -489,6 +490,46 @@ class SchedulerState:
                             self.prayer_file = filepath
                     
                     print(f"Loaded settings from database: ad_file={self.ad_file}, prayer_file={self.prayer_file}")
+                    return  # Success via API
+        except Exception as api_err:
+            print(f"API load failed, trying direct SQLite: {api_err}")
+        
+        # Fallback: Direct SQLite load (for local without Flask)
+        try:
+            import sqlite3
+            
+            # Get DB path
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            if getattr(sys, "frozen", False):
+                base_dir = os.path.dirname(sys.executable)
+            db_path = os.path.join(base_dir, "player.db")
+            
+            if not os.path.exists(db_path):
+                self._load_from_disk()
+                return
+            
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Load ad track
+            cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = ?', ('ad',))
+            row = cursor.fetchone()
+            if row:
+                filepath = row[1]
+                if filepath and os.path.exists(filepath):
+                    self.ad_file = filepath
+                    self.ad_duration_sec = row[2]
+            
+            # Load prayer track
+            cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = ?', ('prayer',))
+            row = cursor.fetchone()
+            if row:
+                filepath = row[1]
+                if filepath and os.path.exists(filepath):
+                    self.prayer_file = filepath
+            
+            conn.close()
+            print(f"Loaded settings from local SQLite: ad_file={self.ad_file}, prayer_file={self.prayer_file}")
         except Exception as e:
             # If database is not available, just use local file
             print(f"Could not load from database (using local file): {e}")
@@ -547,7 +588,8 @@ class SchedulerState:
         self._save_to_database()
 
     def _save_to_database(self) -> None:
-        """Save settings to database (Flask API)."""
+        """Save settings to database (direct SQLite)."""
+        # First try via API (works if Flask is running), else fallback to direct SQLite
         try:
             import urllib.request
             import urllib.parse
@@ -576,6 +618,53 @@ class SchedulerState:
             )
             with urllib.request.urlopen(req, timeout=5) as response:
                 print(f"Settings saved to database: {response.status}")
+                return  # Success via API
+        except Exception as api_err:
+            print(f"API save failed, trying direct SQLite: {api_err}")
+        
+        # Fallback: Direct SQLite save (for local without Flask or GUI-only mode)
+        try:
+            import sqlite3
+            
+            # Get DB path
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            if getattr(sys, "frozen", False):
+                base_dir = os.path.dirname(sys.executable)
+            db_path = os.path.join(base_dir, "player.db")
+            
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            
+            # Create tables if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS tracks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    track_type TEXT NOT NULL UNIQUE,
+                    filename TEXT NOT NULL,
+                    filepath TEXT,
+                    duration_sec REAL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Save ad track
+            if self.ad_file:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO tracks (track_type, filename, filepath, duration_sec, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', ('ad', os.path.basename(self.ad_file), self.ad_file, self.ad_play_duration_sec))
+            
+            # Save prayer track
+            if self.prayer_file:
+                cursor.execute('''
+                    INSERT OR REPLACE INTO tracks (track_type, filename, filepath, duration_sec, updated_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', ('prayer', os.path.basename(self.prayer_file), self.prayer_file, None))
+            
+            conn.commit()
+            conn.close()
+            print("Settings saved to local SQLite")
         except Exception as e:
             print(f"Could not save to database: {e}")
 
