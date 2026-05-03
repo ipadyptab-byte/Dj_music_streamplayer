@@ -80,9 +80,12 @@ def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', d
         supabase_key = get_supabase_key()
         
         if not supabase_url or not supabase_key:
+            print("No Supabase URL or key")
             return False
         
         url = f"{supabase_url}/rest/v1/tracks"
+        
+        # Use PUT for upsert with track_type as unique constraint
         data = json.dumps({
             "track_type": track_type,
             "filename": filename,
@@ -94,11 +97,17 @@ def save_track_to_supabase(track_type: str, filename: str, filepath: str = '', d
             'Content-Type': 'application/json',
             'apikey': supabase_key,
             'Authorization': f'Bearer {supabase_key}',
-            'Prefer': 'resolution=merge-duplicates'
+            'Prefer': 'return=minimal,resolution=merge-duplicates'
         }, method='POST')
         
         with urllib.request.urlopen(req) as resp:
-            return resp.status in (200, 201)
+            status = resp.getcode()
+            print(f"Supabase save status: {status}")
+            return status in (200, 201)
+    except urllib.error.HTTPError as e:
+        print(f"HTTP Error: {e.code} - {e.reason}")
+        # If 406, table doesn't exist or RLS issue
+        return False
     except Exception as e:
         print(f"Supabase save error: {e}")
         return False
@@ -406,15 +415,10 @@ def api_upload_file():
         track_type = request.form.get('track_type')
         filename = secure_filename(file.filename)
         
-        # Ensure upload folder exists - use /tmp for Vercel
-        try:
-            upload_folder = app.config['UPLOAD_FOLDER']
-            os.makedirs(upload_folder, exist_ok=True)
-        except Exception as e:
-            # Try /tmp fallback for Vercel
-            upload_folder = '/tmp/uploads'
-            os.makedirs(upload_folder, exist_ok=True)
-            app.config['UPLOAD_FOLDER'] = upload_folder
+        # Use /tmp for Vercel (writable)
+        upload_folder = '/tmp/uploads'
+        os.makedirs(upload_folder, exist_ok=True)
+        app.config['UPLOAD_FOLDER'] = upload_folder
         
         save_path = os.path.join(upload_folder, filename)
         file.save(save_path)
