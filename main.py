@@ -16,14 +16,35 @@ except ImportError:
 import sqlite3
 import json as json_lib
 
-# Database path - use local file for SQLite
-DB_PATH = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db'))
+# Database path - use local file for SQLite (not for Vercel serverless)
+DB_PATH = None  # Will be set lazily
+
+def _get_db_path():
+    """Get DB path lazily to avoid Vercel issues."""
+    global DB_PATH
+    if DB_PATH is None:
+        # Use a temp path for local development
+        db_path = os.environ.get('DATABASE_URL', '')
+        if not db_path or db_path.startswith('postgres'):
+            # Local SQLite - don't use in Vercel
+            DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db')
+        else:
+            DB_PATH = db_path
+    return DB_PATH
 
 def get_db_connection():
-    """Get a database connection - works with both local SQLite and Vercel Postgres"""
+    """Get a database connection - works with both local SQLite and Vercel Postgres.
+    Returns None if running on Vercel without DATABASE_URL."""
+    
+    # Skip if running on Vercel without DATABASE_URL
+    if os.environ.get('VERCEL') == '1':
+        db_url = os.environ.get('DATABASE_URL', '')
+        if not db_url:
+            return None  # No database available
+    
     db_url = os.environ.get('DATABASE_URL', '')
     
-    if db_url.startswith('postgres'):
+    if db_url and db_url.startswith('postgres'):
         # Vercel Postgres - would need psycopg2
         try:
             import psycopg2
@@ -31,48 +52,61 @@ def get_db_connection():
         except ImportError:
             pass
     
-    # Local SQLite
-    conn = sqlite3.connect(DB_PATH)
+    # Local SQLite only - NOT for Vercel serverless
+    db_path = _get_db_path()
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
-    """Initialize database tables"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Create tracks table for storing ad and prayer track info
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tracks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            track_type TEXT NOT NULL,
-            filename TEXT NOT NULL,
-            filepath TEXT,
-            duration_sec REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Create play_events table for tracking when tracks are played
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS play_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            track_id INTEGER,
-            track_type TEXT NOT NULL,
-            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            ended_at TIMESTAMP,
-            duration_sec REAL,
-            completed BOOLEAN DEFAULT 1,
-            FOREIGN KEY (track_id) REFERENCES tracks (id)
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+def is_db_available() -> bool:
+    """Check if database is available."""
+    return get_db_connection() is not None
 
-# Initialize database on startup
-init_db()
+def init_db():
+    """Initialize database tables (lazy init to avoid Vercel crash)"""
+    # Skip if running on Vercel (no writable filesystem)
+    if os.environ.get('VERCEL') == '1':
+        return
+    
+    # Skip if DATABASE_URL is set (using Postgres)
+    if os.environ.get('DATABASE_URL', '').startswith('postgres'):
+        return
+        
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create tracks table for storing ad and prayer track info
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tracks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_type TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                filepath TEXT,
+                duration_sec REAL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create play_events table for tracking when tracks are played
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS play_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER,
+                track_type TEXT NOT NULL,
+                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ended_at TIMESTAMP,
+                duration_sec REAL,
+                completed BOOLEAN DEFAULT 1,
+                FOREIGN KEY (track_id) REFERENCES tracks (id)
+            )
+        ''')
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Database init failed (non-critical): {e}")
 
 # ===============================
 # PyInstaller-safe base directory
