@@ -519,11 +519,10 @@
             const isPlayingAdvt = (track === advtTrack);
             const isPlayingPrayer = (track === prayerTrack);
             
-            // Handle Blob URLs (local files)
-            if (track.isBlob || track.url.startsWith('blob:')) {
-                console.log('Playing blob URL:', track.url);
+            // Handle Blob URLs (local files) or Data URLs
+            if (track.isBlob || track.url.startsWith('blob:') || track.url.startsWith('data:')) {
+                console.log('Playing local audio:', track.url.substring(0, 50) + '...');
                 
-                // Create audio element 
                 player.src = track.url;
                 player.style.display = 'block';
                 const iframe = document.getElementById('youtube-iframe');
@@ -736,42 +735,30 @@
             } catch(e) { console.error(e); }
         }
         
-        // Upload advt file - use Blob URL (browser memory)
+        // Upload advt file - use Data URL (base64 encoded)
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Validate file type
-            let fileType = file.type;
-            if (!fileType) {
-                const ext = file.name.split('.').pop().toLowerCase();
-                if (ext === 'mp3') fileType = 'audio/mpeg';
-                else if (ext === 'wav') fileType = 'audio/wav';
-                else if (ext === 'ogg') fileType = 'audio/ogg';
-                else if (ext === 'm4a') fileType = 'audio/mp4';
-                else if (ext === 'webm') fileType = 'audio/webm';
-                else {
-                    alert('Unknown file type. Please use MP3, WAV, OGG, or M4A');
-                    return;
-                }
-            }
-            
-            if (!fileType.startsWith('audio/')) {
-                alert('Please select an audio file (MP3, WAV, etc.)');
+            // Validate file type from extension
+            const ext = file.name.split('.').pop().toLowerCase();
+            let mimeType = 'audio/mpeg';
+            if (ext === 'wav') mimeType = 'audio/wav';
+            else if (ext === 'ogg') mimeType = 'audio/ogg';
+            else if (ext === 'm4a') mimeType = 'audio/mp4';
+            else if (ext === 'webm') mimeType = 'audio/webm';
+            else if (ext !== 'mp3') {
+                alert('Please use MP3, WAV, OGG, or M4A file');
                 return;
             }
             
-            console.log('File:', file.name, 'type:', fileType, 'size:', file.size);
-            
-            // Read file and create proper Blob
-            const arrayBuffer = await file.arrayBuffer();
-            const blob = new Blob([arrayBuffer], { type: fileType });
-            const objectUrl = URL.createObjectURL(blob);
+            // Convert to base64 data URL
+            const base64 = await fileToDataURL(file, mimeType);
             
             advtTrack = { 
                 title: file.name, 
-                url: objectUrl, 
+                url: base64, 
                 platform: 'Local',
                 isBlob: true 
             };
@@ -783,40 +770,30 @@
             startAdvtTimer();
         }
         
-        // Upload prayer file - use Blob URL (browser memory)
+        // Upload prayer file - use Data URL (base64 encoded)
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Validate file type
-            let fileType = file.type;
-            if (!fileType) {
-                const ext = file.name.split('.').pop().toLowerCase();
-                if (ext === 'mp3') fileType = 'audio/mpeg';
-                else if (ext === 'wav') fileType = 'audio/wav';
-                else if (ext === 'ogg') fileType = 'audio/ogg';
-                else if (ext === 'm4a') fileType = 'audio/mp4';
-                else if (ext === 'webm') fileType = 'audio/webm';
-                else {
-                    alert('Unknown file type. Please use MP3, WAV, OGG, or M4A');
-                    return;
-                }
-            }
-            
-            if (!fileType.startsWith('audio/')) {
-                alert('Please select an audio file (MP3, WAV, etc.)');
+            // Validate file type from extension
+            const ext = file.name.split('.').pop().toLowerCase();
+            let mimeType = 'audio/mpeg';
+            if (ext === 'wav') mimeType = 'audio/wav';
+            else if (ext === 'ogg') mimeType = 'audio/ogg';
+            else if (ext === 'm4a') mimeType = 'audio/mp4';
+            else if (ext === 'webm') mimeType = 'audio/webm';
+            else if (ext !== 'mp3') {
+                alert('Please use MP3, WAV, OGG, or M4A file');
                 return;
             }
             
-            // Read file and create proper Blob
-            const arrayBuffer = await file.arrayBuffer();
-            const blob = new Blob([arrayBuffer], { type: fileType });
-            const objectUrl = URL.createObjectURL(blob);
+            // Convert to base64 data URL
+            const base64 = await fileToDataURL(file, mimeType);
             
             prayerTrack = { 
                 title: file.name, 
-                url: objectUrl, 
+                url: base64, 
                 platform: 'Local',
                 isBlob: true 
             };
@@ -826,6 +803,16 @@
             alert('Prayer track loaded!');
             
             startPrayerChecker();
+        }
+        
+        // Helper: convert file to base64 data URL
+        function fileToDataURL(file, mimeType) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
         }
         
         // Save Ad Settings
