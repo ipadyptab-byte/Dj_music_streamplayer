@@ -11,6 +11,70 @@ except ImportError:
     pytube = None
 
 # ===============================
+# Database support for Vercel
+# ===============================
+import sqlite3
+import json as json_lib
+
+# Database path - use local file for SQLite
+DB_PATH = os.environ.get('DATABASE_URL', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db'))
+
+def get_db_connection():
+    """Get a database connection - works with both local SQLite and Vercel Postgres"""
+    db_url = os.environ.get('DATABASE_URL', '')
+    
+    if db_url.startswith('postgres'):
+        # Vercel Postgres - would need psycopg2
+        try:
+            import psycopg2
+            return psycopg2.connect(db_url)
+        except ImportError:
+            pass
+    
+    # Local SQLite
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    """Initialize database tables"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Create tracks table for storing ad and prayer track info
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS tracks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_type TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            filepath TEXT,
+            duration_sec REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create play_events table for tracking when tracks are played
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS play_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            track_id INTEGER,
+            track_type TEXT NOT NULL,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ended_at TIMESTAMP,
+            duration_sec REAL,
+            completed BOOLEAN DEFAULT 1,
+            FOREIGN KEY (track_id) REFERENCES tracks (id)
+        )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+# Initialize database on startup
+init_db()
+
+# ===============================
 # PyInstaller-safe base directory
 # ===============================
 if getattr(sys, 'frozen', False):
@@ -282,6 +346,134 @@ if __name__ == '__main__':
     if os.environ.get('VERCEL') != '1':
         Timer(1, open_browser).start()
     app.run(host='127.0.0.1', port=5000)
+
+# ===============================
+# Database API Endpoints
+# ===============================
+
+@app.route('/api/tracks', methods=['GET'])
+def get_tracks():
+    """Get all tracks from database"""
+    track_type = request.args.get('type')  # 'ad' or 'prayer'
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if track_type:
+        cursor.execute('SELECT * FROM tracks WHERE track_type = ? ORDER BY updated_at DESC', (track_type,))
+    else:
+        cursor.execute('SELECT * FROM tracks ORDER BY updated_at DESC')
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    tracks = [dict(row) for row in rows]
+    return jsonify(tracks)
+
+@app.route('/api/tracks', methods=['POST'])
+def save_track():
+    """Save track info to database"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    track_type = data.get('track_type')
+    filename = data.get('filename')
+    filepath = data.get('filepath')
+    duration_sec = data.get('duration_sec')
+    
+    if not track_type or not filename:
+        return jsonify({'error': 'track_type and filename are required'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Check if track already exists
+    cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        # Update existing track
+        cursor.execute('''
+            UPDATE tracks 
+            SET filename = ?, filepath = ?, duration_sec = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE track_type = ?
+        ''', (filename, filepath, duration_sec, track_type))
+        track_id = existing['id']
+    else:
+        # Insert new track
+        cursor.execute('''
+            INSERT INTO tracks (track_type, filename, filepath, duration_sec)
+            VALUES (?, ?, ?, ?)
+        ''', (track_type, filename, filepath, duration_sec))
+        track_id = cursor.lastrowid
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'track_id': track_id})
+
+@app.route('/api/play_events', methods=['GET'])
+def get_play_events():
+    """Get play events from database"""
+    track_type = request.args.get('type')
+    limit = request.args.get('limit', 50, type=int)
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    if track_type:
+        cursor.execute('''
+            SELECT pe.*, t.filename, t.track_type 
+            FROM play_events pe 
+            LEFT JOIN tracks t ON pe.track_id = t.id 
+            WHERE pe.track_type = ?
+            ORDER BY pe.started_at DESC 
+            LIMIT ?
+        ''', (track_type, limit))
+    else:
+        cursor.execute('''
+            SELECT pe.*, t.filename, t.track_type 
+            FROM play_events pe 
+            LEFT JOIN tracks t ON pe.track_id = t.id 
+            ORDER BY pe.started_at DESC 
+            LIMIT ?
+        ''', (limit,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+    
+    events = [dict(row) for row in rows]
+    return jsonify(events)
+
+@app.route('/api/play_events', methods=['POST'])
+def save_play_event():
+    """Save a play event to database"""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    track_type = data.get('track_type')
+    track_id = data.get('track_id')
+    ended_at = data.get('ended_at')
+    duration_sec = data.get('duration_sec')
+    completed = data.get('completed', True)
+    
+    if not track_type:
+        return jsonify({'error': 'track_type is required'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO play_events (track_id, track_type, ended_at, duration_sec, completed)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (track_id, track_type, ended_at, duration_sec, completed))
+    
+    event_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'event_id': event_id})
 
 # For Vercel serverless
 app.debug = False

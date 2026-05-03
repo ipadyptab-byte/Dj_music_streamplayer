@@ -329,11 +329,15 @@ class MainTrackPlayer:
             if self._proc and self._proc.poll() is None and self._start_monotonic is not None:
                 elapsed += time.monotonic() - self._start_monotonic
 
+            # Check if ad is currently playing (priority process is running)
+            is_ad_playing = bool(self._priority_proc and self._priority_proc.poll() is None)
+
             return {
                 "file": self._current_file,
                 "is_playing": bool(self._proc and self._proc.poll() is None),
                 "elapsed": elapsed,
                 "finished": finished,
+                "is_ad_playing": is_ad_playing,
             }
 
 
@@ -536,6 +540,9 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     f"({os.path.basename(ad_file)}, {ad_play_duration}s per play)"
                 )
                 
+                # Record ad start time for database
+                ad_start_time = datetime.now().isoformat()
+                
                 # Play ad in repeat mode until main track ends or changes
                 while state.running:
                     # Check if prayer started
@@ -586,12 +593,28 @@ def ad_worker(state: SchedulerState, ui: "MainWindow") -> None:
                         # Continue ad cycle with new main track
                     
                     # Play ad for the specified duration
+                    ad_play_start = time.monotonic()
                     try:
                         # Use play_ad_timed to play ad for limited duration
                         state.main_player.play_ad_timed(ad_file, ad_play_duration)
+                        ad_elapsed = time.monotonic() - ad_play_start
                     except Exception as e:
                         ui.log(f"Ad playback error: {e}")
+                        ad_elapsed = 0
                         break
+                    
+                    # Save ad play event to database
+                    try:
+                        save_play_event_to_db(
+                            "ad",
+                            None,  # track_id
+                            ad_start_time,
+                            datetime.now().isoformat(),
+                            ad_elapsed,
+                            True
+                        )
+                    except Exception as db_err:
+                        ui.log(f"Warning: Could not save ad play event to database: {db_err}")
                     
                     # If we reach here, ad finished its duration, loop to repeat
                     # Small delay between ad repeats
@@ -615,12 +638,15 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
     """Check every second and play prayer at configured times.
 
     When a prayer starts:
-    - Stop BOTH main track AND advertisement immediately
+    - Wait for any running ad track to complete first (if ad is playing)
+    - Then stop main track
     - Play prayer track
     
     After prayer ends:
     - Start main track first from history (or resume if was paused)
     - Then ad_worker will resume the normal ad scheduling
+    
+    IMPORTANT: If prayer is below 60 seconds, it still plays fully - ad must complete first.
     """
     while state.running:
         try:
@@ -642,7 +668,27 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                     if os.path.exists(prayer_file):
                         ui.log(f"Prayer triggered at {t}: {os.path.basename(prayer_file)}")
 
-                        # STOP advertisement immediately (don't wait for it to finish)
+                        # First, wait for advertisement to complete (if running)
+                        ui.log("Checking for running advertisement...")
+                        ad_completed = False
+                        max_wait_time = 120  # Max wait 2 minutes for ad to finish
+                        waited_sec = 0
+                        
+                        while waited_sec < max_wait_time and state.running:
+                            main_status = state.main_player.get_status()
+                            if not main_status.get("is_ad_playing"):
+                                ad_completed = True
+                                break
+                            time.sleep(1)
+                            waited_sec += 1
+                        
+                        if not ad_completed:
+                            ui.log(f"Warning: Ad did not complete after {max_wait_time}s, proceeding anyway")
+                        
+                        if ad_completed:
+                            ui.log("Advertisement completed, proceeding with prayer")
+
+                        # STOP advertisement immediately after ad completes
                         ui.log("Stopping advertisement track for prayer.")
                         state.main_player.stop_priority()
 
@@ -665,6 +711,9 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                                 if state.main_title:
                                     main_title_before = state.main_title
                         
+                        # Record prayer start time for database
+                        prayer_start_time = datetime.now().isoformat()
+                        
                         try:
                             # Pause (stop) main track explicitly so only prayer plays
                             if main_was_playing:
@@ -673,15 +722,31 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                             
                             # Play prayer track fully (blocking) without touching main state
                             ui.log("Starting prayer track.")
-                            play_with_ffplay(prayer_file)
+                            prayer_elapsed = play_with_ffplay_timed(prayer_file)
+                            prayer_duration = prayer_elapsed if prayer_elapsed else 0
                             
-                            ui.log("Prayer track finished.")
+                            ui.log(f"Prayer track finished (duration: {prayer_duration:.1f}s)")
                         except Exception as e:
                             ui.log(f"Prayer playback error: {e}")
+                            prayer_duration = 0
                         finally:
                             # Allow ads again after prayer finishes
                             with state.lock:
                                 state.in_prayer = False
+                            
+                            # Save play event to database for prayer track
+                            try:
+                                save_play_event_to_db(
+                                    "prayer", 
+                                    None,  # track_id 
+                                    prayer_start_time, 
+                                    datetime.now().isoformat(), 
+                                    prayer_duration, 
+                                    True
+                                )
+                                ui.log("Prayer play event saved to database")
+                            except Exception as db_err:
+                                ui.log(f"Warning: Could not save prayer play event to database: {db_err}")
                             
                             ui.log("Prayer finished, restarting main track.")
                             
@@ -710,8 +775,15 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
                                             state.main_history_index = 0
                             elif main_path_before:
                                 # Main was stopped during prayer, play it again
-                                ui.log(f"Restarting main track: {main_title_before or os.path.basename(main_path_before)}")
-                                state.main_player.play_new(main_path_before)
+                                with state.lock:
+                                    history = list(state.main_history)
+                                
+                                if history:
+                                    path, title = history[0]
+                                    ui.log(f"Restarting main track: {title}")
+                                    state.main_player.play_new(path)
+                                    with state.lock:
+                                        state.main_history_index = 0
                             else:
                                 # No main track was playing, try to get from history
                                 with state.lock:
@@ -728,6 +800,65 @@ def prayer_worker(state: SchedulerState, ui: "MainWindow") -> None:
         except Exception as e:
             ui.log(f"Error in prayer worker: {e}")
             time.sleep(2)
+
+
+def play_with_ffplay_timed(path: str) -> float | None:
+    """Play an audio file and return the elapsed time in seconds.
+    
+    Returns the actual duration played, or None if the file doesn't exist.
+    """
+    if not os.path.exists(path):
+        return None
+    
+    start_time = time.monotonic()
+    
+    try:
+        # On Windows, prevent a console window from popping up for ffplay.
+        creationflags = 0
+        if platform.system() == "Windows":
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.run([
+            "ffplay",
+            "-nodisp",
+            "-autoexit",
+            path,
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=creationflags)
+        # Process finished naturally
+        elapsed = time.monotonic() - start_time
+        return elapsed
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffplay (from ffmpeg) is not installed or not on PATH.\n"
+            "Please install ffmpeg and restart the application."
+        )
+
+
+def save_play_event_to_db(track_type: str, track_id: int | None, started_at: str, ended_at: str, duration_sec: float, completed: bool) -> bool:
+    """Save a play event to the database via API call"""
+    try:
+        import urllib.request
+        import urllib.parse
+        
+        # Call the Flask API to save the event
+        data = urllib.parse.urlencode({
+            'track_type': track_type,
+            'track_id': track_id if track_id else '',
+            'started_at': started_at,
+            'ended_at': ended_at,
+            'duration_sec': duration_sec,
+            'completed': 'true' if completed else 'false'
+        }).encode()
+        
+        req = urllib.request.Request(
+            'http://127.0.0.1:5000/api/play_events',
+            data=data,
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"Failed to save play event to database: {e}")
+        return False
 
 
 # ---------------------------
