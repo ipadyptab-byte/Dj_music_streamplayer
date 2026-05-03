@@ -522,6 +522,8 @@
             // Handle Blob URLs (local files)
             if (track.isBlob || track.url.startsWith('blob:')) {
                 console.log('Playing blob URL:', track.url);
+                
+                // Create audio element 
                 player.src = track.url;
                 player.style.display = 'block';
                 const iframe = document.getElementById('youtube-iframe');
@@ -532,7 +534,7 @@
                     player.play().catch(e => console.error('Play error:', e));
                 };
                 player.onerror = function(e) {
-                    console.error('Audio load error:', player.error);
+                    console.error('Audio load error:', player.error, 'code:', player.error ? player.error.code : 'none');
                 };
                 
                 // Track which track is playing
@@ -740,8 +742,32 @@
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Create Blob URL for local playback
-            const objectUrl = URL.createObjectURL(file);
+            // Validate file type
+            let fileType = file.type;
+            if (!fileType) {
+                // Try to detect from extension
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (ext === 'mp3') fileType = 'audio/mpeg';
+                else if (ext === 'wav') fileType = 'audio/wav';
+                else if (ext === 'ogg') fileType = 'audio/ogg';
+                else if (ext === 'm4a') fileType = 'audio/mp4';
+                else if (ext === 'webm') fileType = 'audio/webm';
+                else {
+                    alert('Unknown file type. Please use MP3, WAV, OGG, or M4A');
+                    return;
+                }
+            }
+            
+            if (!fileType.startsWith('audio/')) {
+                alert('Please select an audio file (MP3, WAV, etc.)');
+                return;
+            }
+            
+            console.log('File:', file.name, 'type:', fileType, 'size:', file.size);
+            
+            // Create blob with explicit type
+            const blob = new Blob([file], { type: fileType });
+            const objectUrl = URL.createObjectURL(blob);
             
             advtTrack = { 
                 title: file.name, 
@@ -763,8 +789,29 @@
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Create Blob URL for local playback
-            const objectUrl = URL.createObjectURL(file);
+            // Validate file type
+            let fileType = file.type;
+            if (!fileType) {
+                const ext = file.name.split('.').pop().toLowerCase();
+                if (ext === 'mp3') fileType = 'audio/mpeg';
+                else if (ext === 'wav') fileType = 'audio/wav';
+                else if (ext === 'ogg') fileType = 'audio/ogg';
+                else if (ext === 'm4a') fileType = 'audio/mp4';
+                else if (ext === 'webm') fileType = 'audio/webm';
+                else {
+                    alert('Unknown file type. Please use MP3, WAV, OGG, or M4A');
+                    return;
+                }
+            }
+            
+            if (!fileType.startsWith('audio/')) {
+                alert('Please select an audio file (MP3, WAV, etc.)');
+                return;
+            }
+            
+            // Create blob with explicit type
+            const blob = new Blob([file], { type: fileType });
+            const objectUrl = URL.createObjectURL(blob);
             
             prayerTrack = { 
                 title: file.name, 
