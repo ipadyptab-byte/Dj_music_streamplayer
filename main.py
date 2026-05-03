@@ -10,26 +10,30 @@ try:
 except ImportError:
     pytube = None
 
+# Debug: Print environment on startup
+print("FLASK_ENV:", os.environ.get('FLASK_ENV'))
+print("VERCEL:", os.environ.get('VERCEL'))
+print("DATABASE_URL:", os.environ.get('DATABASE_URL', '')[:20] if os.environ.get('DATABASE_URL') else 'not set')
+
 # ===============================
 # Database support for Vercel
 # ===============================
 import sqlite3
 import json as json_lib
 
-# Database path - use local file for SQLite (not for Vercel serverless)
+# Database path - use local file for SQLite
 DB_PATH = None  # Will be set lazily
 
 def _get_db_path():
-    """Get DB path lazily to avoid Vercel issues."""
+    """Get DB path lazily."""
     global DB_PATH
     if DB_PATH is None:
         # Use a temp path for local development
         db_path = os.environ.get('DATABASE_URL', '')
-        if not db_path or db_path.startswith('postgres'):
-            # Local SQLite - don't use in Vercel
-            DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db')
-        else:
+        if db_path and db_path.startswith('postgres'):
             DB_PATH = db_path
+        else:
+            DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db')
     return DB_PATH
 
 def get_db_connection():
@@ -346,60 +350,60 @@ def play():
         return jsonify({'error': 'Unknown platform. Please use YouTube or upload local file.'}), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
-    """Upload a file and optionally store track info to database."""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    # Get track_type if provided (ad or prayer)
-    track_type = request.form.get('track_type')
-    
-    filename = secure_filename(file.filename)
-    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(save_path)
-    
-    result = {'url': f'/api/uploads/{filename}', 'title': filename}
-    
-    # If track_type provided, try to save to database
-    if track_type:
-        try:
-            conn = get_db_connection()
-            if conn is not None:
-                cursor = conn.cursor()
-                
-                # Check if track already exists
-                cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
-                existing = cursor.fetchone()
-                
-                if existing:
-                    # Update existing
-                    cursor.execute('''
-                        UPDATE tracks 
-                        SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
-                        WHERE track_type = ?
-                    ''', (filename, save_path, track_type))
-                else:
-                    # Insert new
-                    cursor.execute('''
-                        INSERT INTO tracks (track_type, filename, filepath)
-                        VALUES (?, ?, ?)
-                    ''', (track_type, filename, save_path))
-                
-                conn.commit()
-                conn.close()
-                result['track_type'] = track_type
-                result['saved_to_db'] = True
-            else:
-                # Database not available, just save file
+    """Upload a file."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+        
+        track_type = request.form.get('track_type')
+        filename = secure_filename(file.filename)
+        
+        # Ensure upload folder exists
+        upload_folder = app.config['UPLOAD_FOLDER']
+        os.makedirs(upload_folder, exist_ok=True)
+        
+        save_path = os.path.join(upload_folder, filename)
+        file.save(save_path)
+        
+        result = {'url': f'/api/uploads/{filename}', 'title': filename}
+        
+        # Try to save to database
+        if track_type:
+            try:
+                conn = get_db_connection()
+                if conn is not None:
+                    cursor = conn.cursor()
+                    cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
+                    existing = cursor.fetchone()
+                    
+                    if existing:
+                        cursor.execute('''
+                            UPDATE tracks 
+                            SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
+                            WHERE track_type = ?
+                        ''', (filename, save_path, track_type))
+                    else:
+                        cursor.execute('''
+                            INSERT INTO tracks (track_type, filename, filepath)
+                            VALUES (?, ?, ?)
+                        ''', (track_type, filename, save_path))
+                    
+                    conn.commit()
+                    conn.close()
+                    result['track_type'] = track_type
+                    result['saved_to_db'] = True
+            except Exception as e:
                 result['track_type'] = track_type
                 result['saved_to_db'] = False
-        except Exception as e:
-            print(f"Error saving track to database: {e}")
-            result['saved_to_db'] = False
-    
-    return jsonify(result)
+                print(f"DB save error: {e}")
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Upload error: {e}")
+        return jsonify({'error': str(e)}), 500
 @app.route('/api/uploads/<filename>')
 def api_uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
