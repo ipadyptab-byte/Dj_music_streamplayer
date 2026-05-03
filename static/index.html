@@ -1072,8 +1072,11 @@
             }, 1000);
             
             restoreSettings();
-            startAdvtTimer();
-            startPrayerChecker();
+            // Delay timer start to ensure elements exist
+            setTimeout(function() {
+                startAdvtTimer();
+                startPrayerChecker();
+            }, 100);
             
             document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
             document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
