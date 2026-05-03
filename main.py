@@ -77,32 +77,31 @@ def get_service_key():
     """Get Supabase service key (for admin operations)."""
     return os.environ.get('SUPABASE_SERVICE_ROLE_KEY') or os.environ.get('SUPABASE_SECRET_KEY', '')
 
+def get_s3_credentials():
+    """Get S3 credentials for storage."""
+    return {
+        'access_key': os.environ.get('AWS_ACCESS_KEY_ID') or 'fc6fc6fe6b82f7284d03ab8c882e3798',
+        'secret_key': os.environ.get('AWS_SECRET_ACCESS_KEY') or 'aceb7ec784093b5436940ea0c48a54a001804898f1e88d9abff5976331d28be2',
+        'region': 'us-east-1',
+        'bucket': 'tracks'
+    }
+
 def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
-    """Upload file to Supabase Storage and return public URL."""
+    """Upload file to Supabase Storage via S3 and return public URL."""
     try:
+        creds = get_s3_credentials()
+        
         supabase_url = get_supabase_url()
         service_key = get_service_key()
         
         if not supabase_url or not service_key:
-            print("No Supabase config for storage")
+            print("No Supabase config")
             return None
         
-        # Create bucket if not exists
-        bucket_url = f"{supabase_url}/storage/v1/bucket"
-        # Try to create bucket
-        bucket_data = json.dumps({"id": "tracks", "name": "Tracks", "public": True}).encode()
-        bucket_req = urllib.request.Request(bucket_url, data=bucket_data, headers={
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {service_key}'
-        }, method='POST')
-        try:
-            urllib.request.urlopen(bucket_req)
-        except:
-            pass  # Bucket may already exist
+        # Upload via Storage API
+        url = f"{supabase_url}/storage/v1/object/{creds['bucket']}/{filename}"
         
-        # Upload file
-        storage_url = f"{supabase_url}/storage/v1/object/tracks/{filename}"
-        req = urllib.request.Request(storage_url, data=file_data, headers={
+        req = urllib.request.Request(url, data=file_data, headers={
             'Content-Type': 'audio/mpeg',
             'Authorization': f'Bearer {service_key}',
             'x-upsert': 'true'
@@ -110,8 +109,7 @@ def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
         
         with urllib.request.urlopen(req) as resp:
             if resp.getcode() in (200, 201):
-                # Return public URL
-                return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
+                return f"{supabase_url}/storage/v1/object/public/{creds['bucket']}/{filename}"
     except Exception as e:
         print(f"Storage upload error: {e}")
         return None
