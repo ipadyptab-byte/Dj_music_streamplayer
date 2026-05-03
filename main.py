@@ -441,6 +441,9 @@ def play():
         return jsonify({'error': 'Spotify streaming requires OAuth. Please use YouTube or upload local file.'}), 500
     
     else:
+        # For direct URLs (Supabase Storage, uploaded files, etc.)
+        if video_url.startswith('http'):
+            return jsonify({'url': video_url})
         return jsonify({'error': 'Unknown platform. Please use YouTube or upload local file.'}), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
