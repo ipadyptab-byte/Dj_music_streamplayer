@@ -355,9 +355,15 @@ def api_upload_file():
         track_type = request.form.get('track_type')
         filename = secure_filename(file.filename)
         
-        # Ensure upload folder exists
-        upload_folder = app.config['UPLOAD_FOLDER']
-        os.makedirs(upload_folder, exist_ok=True)
+        # Ensure upload folder exists - use /tmp for Vercel
+        try:
+            upload_folder = app.config['UPLOAD_FOLDER']
+            os.makedirs(upload_folder, exist_ok=True)
+        except Exception as e:
+            # Try /tmp fallback for Vercel
+            upload_folder = '/tmp/uploads'
+            os.makedirs(upload_folder, exist_ok=True)
+            app.config['UPLOAD_FOLDER'] = upload_folder
         
         save_path = os.path.join(upload_folder, filename)
         file.save(save_path)
