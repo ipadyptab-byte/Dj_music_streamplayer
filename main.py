@@ -312,15 +312,55 @@ def play():
         return jsonify({'error': 'Unknown platform. Please use YouTube or upload local file.'}), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
+    """Upload a file and optionally store track info to database."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
+    
+    # Get track_type if provided (ad or prayer)
+    track_type = request.form.get('track_type')
+    
     filename = secure_filename(file.filename)
     save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(save_path)
-    return jsonify({'url': f'/api/uploads/{filename}', 'title': filename})
+    
+    result = {'url': f'/api/uploads/{filename}', 'title': filename}
+    
+    # If track_type provided, save to database
+    if track_type:
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            
+            # Check if track already exists
+            cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # Update existing
+                cursor.execute('''
+                    UPDATE tracks 
+                    SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE track_type = ?
+                ''', (filename, save_path, track_type))
+            else:
+                # Insert new
+                cursor.execute('''
+                    INSERT INTO tracks (track_type, filename, filepath)
+                    VALUES (?, ?, ?)
+                ''', (track_type, filename, save_path))
+            
+            conn.commit()
+            conn.close()
+            result['track_type'] = track_type
+            result['saved_to_db'] = True
+        except Exception as e:
+            print(f"Error saving track to database: {e}")
+            result['saved_to_db'] = False
+    
+    return jsonify(result)
 @app.route('/api/uploads/<filename>')
 def api_uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
@@ -477,3 +517,102 @@ def save_play_event():
 
 # For Vercel serverless
 app.debug = False
+
+# ===============================
+# Settings API (save/load all settings)
+# ===============================
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Get all settings from database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Get tracks
+    cursor.execute('SELECT track_type, filename, filepath, duration_sec FROM tracks')
+    tracks = {row['track_type']: dict(row) for row in cursor.fetchall()}
+    
+    # Get play events (last 10 of each type)
+    cursor.execute('''
+        SELECT track_type, started_at, duration_sec 
+        FROM play_events 
+        ORDER BY started_at DESC 
+        LIMIT 20
+    ''')
+    play_events = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return jsonify({
+        'tracks': tracks,
+        'play_events': play_events
+    })
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    """Save all settings to database."""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Save advertisement settings
+    if 'ad' in data:
+        ad_data = data['ad']
+        filename = ad_data.get('filename')
+        filepath = ad_data.get('filepath')
+        interval_sec = ad_data.get('interval_sec', 180)
+        play_duration_sec = ad_data.get('play_duration_sec', 30)
+        
+        cursor.execute('SELECT id FROM tracks WHERE track_type = ?', ('ad',))
+        existing = cursor.fetchone()
+        
+        if existing:
+            cursor.execute('''
+                UPDATE tracks 
+                SET filename = ?, filepath = ?, duration_sec = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE track_type = ?
+            ''', (filename, filepath, play_duration_sec, 'ad'))
+        else:
+            cursor.execute('''
+                INSERT INTO tracks (track_type, filename, filepath, duration_sec)
+                VALUES (?, ?, ?, ?)
+            ''', ('ad', filename, filepath, play_duration_sec))
+    
+    # Save prayer settings
+    if 'prayer' in data:
+        prayer_data = data['prayer']
+        filename = prayer_data.get('filename')
+        filepath = prayer_data.get('filepath')
+        times = prayer_data.get('times', [])
+        duration_sec = prayer_data.get('duration_sec')
+        
+        cursor.execute('SELECT id FROM tracks WHERE track_type = ?', ('prayer',))
+        existing = cursor.fetchone()
+        
+        if existing:
+            cursor.execute('''
+                UPDATE tracks 
+                SET filename = ?, filepath = ?, duration_sec = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE track_type = ?
+            ''', (filename, filepath, duration_sec, 'prayer'))
+        else:
+            cursor.execute('''
+                INSERT INTO tracks (track_type, filename, filepath, duration_sec)
+                VALUES (?, ?, ?, ?)
+            ''', (filename, filepath, duration_sec, 'prayer'))
+        
+        # Store prayer times in a separate table or as JSON
+        # For now, save to play_events as metadata
+        for prayer_time in times:
+            cursor.execute('''
+                INSERT INTO play_events (track_type, started_at, duration_sec, completed)
+                VALUES (?, ?, ?, ?)
+            ''', (f'prayer_time_{prayer_time}', prayer_time, 0, True))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})

@@ -418,6 +418,9 @@ class SchedulerState:
         # How many seconds to play the ad track before repeating (until main track changes)
         self.ad_play_duration_sec: int = 30
 
+        # Try to load settings from database on startup
+        self._load_from_database()
+
         self.prayer_file: str | None = None
         # List[str] of "HH:MM" times
         self.prayer_times: list[str] = []
@@ -455,6 +458,42 @@ class SchedulerState:
         # Load any saved settings from disk
         self._load_from_disk()
 
+    def _load_from_database(self) -> None:
+        """Load settings from database on startup (if available)."""
+        try:
+            import urllib.request
+            import urllib.parse
+            
+            # Call the Flask API to get settings
+            req = urllib.request.Request('http://127.0.0.1:5000/api/settings')
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    import json
+                    data = json.loads(response.read().decode())
+                    
+                    tracks = data.get('tracks', {})
+                    
+                    # Load advertisement settings
+                    if 'ad' in tracks:
+                        ad_track = tracks['ad']
+                        filepath = ad_track.get('filepath')
+                        if filepath and os.path.exists(filepath):
+                            self.ad_file = filepath
+                        self.ad_duration_sec = ad_track.get('duration_sec')
+                    
+                    # Load prayer settings
+                    if 'prayer' in tracks:
+                        prayer_track = tracks['prayer']
+                        filepath = prayer_track.get('filepath')
+                        if filepath and os.path.exists(filepath):
+                            self.prayer_file = filepath
+                    
+                    print(f"Loaded settings from database: ad_file={self.ad_file}, prayer_file={self.prayer_file}")
+        except Exception as e:
+            # If database is not available, just use local file
+            print(f"Could not load from database (using local file): {e}")
+            self._load_from_disk()
+
     def _load_from_disk(self) -> None:
         """Load persisted settings (ad/prayer tracks and timings) if present."""
         if not os.path.exists(self.settings_path):
@@ -484,7 +523,7 @@ class SchedulerState:
                 self.prayer_file = None
 
     def save_to_disk(self) -> None:
-        """Persist current settings so they survive app restarts."""
+        """Persist current settings to both local file AND database."""
         os.makedirs(os.path.dirname(self.settings_path), exist_ok=True)
         with self.lock:
             data = {
@@ -495,12 +534,50 @@ class SchedulerState:
                 "prayer_file": self.prayer_file,
                 "prayer_times": self.prayer_times,
             }
+        
+        # Save to local file (always)
         try:
             with open(self.settings_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
         except Exception:
             # Persistence failure shouldn't crash the app; ignore errors.
             pass
+        
+        # Also try to save to database
+        self._save_to_database()
+
+    def _save_to_database(self) -> None:
+        """Save settings to database (Flask API)."""
+        try:
+            import urllib.request
+            import urllib.parse
+            import json
+            
+            settings_data = {
+                "ad": {
+                    "filename": os.path.basename(self.ad_file) if self.ad_file else None,
+                    "filepath": self.ad_file,
+                    "interval_sec": self.ad_interval_sec,
+                    "play_duration_sec": self.ad_play_duration_sec
+                },
+                "prayer": {
+                    "filename": os.path.basename(self.prayer_file) if self.prayer_file else None,
+                    "filepath": self.prayer_file,
+                    "times": list(self.prayer_times),
+                    "duration_sec": None
+                }
+            }
+            
+            data = urllib.parse.urlencode(settings_data).encode()
+            req = urllib.request.Request(
+                'http://127.0.0.1:5000/api/settings',
+                data=data,
+                method='POST'
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                print(f"Settings saved to database: {response.status}")
+        except Exception as e:
+            print(f"Could not save to database: {e}")
 
 
 # ---------------------------
