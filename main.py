@@ -749,7 +749,7 @@ def get_track_info(track_type):
 @app.route('/api/settings/ad', methods=['POST'])
 def save_ad_settings():
     """Save ad interval and duration to database."""
-    data = request.json
+    data = request.get_json(silent=True) or {}
     if not data:
         return jsonify({'error': 'No data provided'}), 400
     
@@ -758,22 +758,12 @@ def save_ad_settings():
     
     conn = get_db_connection()
     if conn is None:
-        return jsonify({'success': False, 'error': 'No database'}), 400
+        return jsonify({'success': True, 'interval': interval_sec, 'duration': play_duration_sec})
     
     cursor = conn.cursor()
     
-    # Update ad track with duration_sec = play_duration_sec
-    cursor.execute('''
-        UPDATE tracks 
-        SET duration_sec = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE track_type = 'ad'
-    ''', (play_duration_sec,))
-    
-    # Save interval to a settings row
-    cursor.execute('''
-        INSERT OR REPLACE INTO tracks (track_type, filename, filepath, duration_sec, updated_at)
-        VALUES ('ad_interval', 'interval', 'interval', ?, CURRENT_TIMESTAMP)
-    ''', (interval_sec,))
+    # Insert or update settings
+    cursor.execute('''INSERT OR REPLACE INTO tracks (track_type, filename, filepath, duration_sec) VALUES ('ad_interval', 'interval', 'interval', ?)''', (interval_sec,))
     
     conn.commit()
     conn.close()
