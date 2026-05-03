@@ -362,34 +362,39 @@ def api_upload_file():
     
     result = {'url': f'/api/uploads/{filename}', 'title': filename}
     
-    # If track_type provided, save to database
+    # If track_type provided, try to save to database
     if track_type:
         try:
             conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Check if track already exists
-            cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
-            existing = cursor.fetchone()
-            
-            if existing:
-                # Update existing
-                cursor.execute('''
-                    UPDATE tracks 
-                    SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE track_type = ?
-                ''', (filename, save_path, track_type))
+            if conn is not None:
+                cursor = conn.cursor()
+                
+                # Check if track already exists
+                cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Update existing
+                    cursor.execute('''
+                        UPDATE tracks 
+                        SET filename = ?, filepath = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE track_type = ?
+                    ''', (filename, save_path, track_type))
+                else:
+                    # Insert new
+                    cursor.execute('''
+                        INSERT INTO tracks (track_type, filename, filepath)
+                        VALUES (?, ?, ?)
+                    ''', (track_type, filename, save_path))
+                
+                conn.commit()
+                conn.close()
+                result['track_type'] = track_type
+                result['saved_to_db'] = True
             else:
-                # Insert new
-                cursor.execute('''
-                    INSERT INTO tracks (track_type, filename, filepath)
-                    VALUES (?, ?, ?)
-                ''', (track_type, filename, save_path))
-            
-            conn.commit()
-            conn.close()
-            result['track_type'] = track_type
-            result['saved_to_db'] = True
+                # Database not available, just save file
+                result['track_type'] = track_type
+                result['saved_to_db'] = False
         except Exception as e:
             print(f"Error saving track to database: {e}")
             result['saved_to_db'] = False
@@ -590,7 +595,7 @@ def get_track_info(track_type):
     """Get track info (filename, url) for frontend."""
     conn = get_db_connection()
     if conn is None:
-        return jsonify({'error': 'No database'}), 400
+        return jsonify({'found': False})  # Return valid JSON, not error
     
     cursor = conn.cursor()
     cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = ?', (track_type,))
@@ -620,7 +625,7 @@ def save_ad_settings():
     
     conn = get_db_connection()
     if conn is None:
-        return jsonify({'error': 'No database'}), 400
+        return jsonify({'success': False, 'error': 'No database'}), 400
     
     cursor = conn.cursor()
     
