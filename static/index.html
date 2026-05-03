@@ -364,6 +364,10 @@
             <label>Play every (seconds):</label>
             <input type="number" id="advt-interval" value="300" min="60">
         </div>
+        <div class="setting-row">
+            <label>Duration (seconds):</label>
+            <input type="number" id="advt-duration" value="30" min="5">
+        </div>
         <div class="setting-controls">
             <button class="ctrl-btn play" onclick="playAdvt()">▶</button>
             <button class="ctrl-btn pause" onclick="pauseAdvt()">⏸</button>
@@ -788,9 +792,18 @@
         
         // Start advt interval timer
         function startAdvtTimer() {
-            var enabled = document.getElementById('advt-enabled').checked;
-            var interval = parseInt(document.getElementById('advt-interval').value) || 300;
-            var duration = parseInt(document.getElementById('advt-duration').value) || 30;
+            var enabled = document.getElementById('advt-enabled');
+            var intervalEl = document.getElementById('advt-interval');
+            var durationEl = document.getElementById('advt-duration');
+            
+            if (!enabled || !intervalEl || !durationEl) {
+                console.log('Elements not ready yet');
+                return;
+            }
+            
+            var enabled = enabled.checked;
+            var interval = parseInt(intervalEl.value) || 300;
+            var duration = parseInt(durationEl.value) || 30;
             console.log('startAdvtTimer: enabled=' + enabled + ', advtTrack=' + (advtTrack ? advtTrack.title : 'null') + ', interval=' + interval);
             
             // Save to database
