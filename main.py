@@ -36,24 +36,27 @@ def _get_db_path():
     return DB_PATH
 
 def get_db_connection():
-    """Get a database connection."""
-    db_url = os.environ.get('DATABASE_URL', '')
+    """Get a database connection using Supabase Postgres."""
+    # Try Supabase Postgres first
+    db_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or os.environ.get('POSTGRES_URL_NON_POOLING', '')
     
-    if db_url.startswith('postgres'):
+    if db_url and db_url.startswith('postgres'):
         try:
             import psycopg2
             return psycopg2.connect(db_url)
-        except ImportError:
-            pass
+        except ImportError as e:
+            print(f"psycopg2 error: {e}")
+        except Exception as e:
+            print(f"DB connection error: {e}")
     
-    # Local SQLite 
+    # Fallback to local SQLite
     try:
         db_path = _get_db_path()
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return conn
     except Exception as e:
-        print(f"DB connection error: {e}")
+        print(f"SQLite connection error: {e}")
         return None
 
 def is_db_available() -> bool:
@@ -61,50 +64,31 @@ def is_db_available() -> bool:
     return get_db_connection() is not None
 
 def init_db():
-    """Initialize database tables (lazy init to avoid Vercel crash)"""
-    # Skip if running on Vercel (no writable filesystem)
-    if os.environ.get('VERCEL') == '1':
-        return
+    """Initialize database tables."""
+    db_url = os.environ.get('DATABASE_URL') or os.environ.get('POSTGRES_URL') or ''
     
-    # Skip if DATABASE_URL is set (using Postgres)
-    if os.environ.get('DATABASE_URL', '').startswith('postgres'):
-        return
-        
     try:
         conn = get_db_connection()
+        if conn is None:
+            print("No DB connection")
+            return
+        
         cursor = conn.cursor()
         
-        # Create tracks table for storing ad and prayer track info
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tracks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                track_type TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                filepath TEXT,
-                duration_sec REAL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Create play_events table for tracking when tracks are played
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS play_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                track_id INTEGER,
-                track_type TEXT NOT NULL,
-                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ended_at TIMESTAMP,
-                duration_sec REAL,
-                completed BOOLEAN DEFAULT 1,
-                FOREIGN KEY (track_id) REFERENCES tracks (id)
-            )
-        ''')
+        if db_url.startswith('postgres'):
+            # PostgreSQL (Supabase)
+            cursor.execute('''CREATE TABLE IF NOT EXISTS tracks (id SERIAL PRIMARY KEY, track_type TEXT NOT NULL UNIQUE, filename TEXT NOT NULL, filepath TEXT, duration_sec REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS play_events (id SERIAL PRIMARY KEY, track_id INTEGER, track_type TEXT NOT NULL, started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP, duration_sec REAL, completed BOOLEAN DEFAULT TRUE)''')
+        else:
+            # SQLite
+            cursor.execute('''CREATE TABLE IF NOT EXISTS tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, track_type TEXT NOT NULL, filename TEXT NOT NULL, filepath TEXT, duration_sec REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+            cursor.execute('''CREATE TABLE IF NOT EXISTS play_events (id INTEGER PRIMARY KEY AUTOINCREMENT, track_id INTEGER, track_type TEXT NOT NULL, started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP, duration_sec REAL, completed BOOLEAN DEFAULT 1)''')
         
         conn.commit()
         conn.close()
+        print("DB initialized")
     except Exception as e:
-        print(f"Database init failed (non-critical): {e}")
+        print(f"Init DB error: {e}")
 
 # ===============================
 # PyInstaller-safe base directory
@@ -437,12 +421,15 @@ if __name__ == '__main__':
 @app.route('/api/tracks', methods=['GET'])
 def get_tracks():
     """Get all tracks from database"""
-    track_type = request.args.get('type')  # 'ad' or 'prayer'
+    track_type = request.args.get('type')
     conn = get_db_connection()
+    if conn is None:
+        return jsonify([])
+    
     cursor = conn.cursor()
     
     if track_type:
-        cursor.execute('SELECT * FROM tracks WHERE track_type = ? ORDER BY updated_at DESC', (track_type,))
+        cursor.execute('SELECT * FROM tracks WHERE track_type = %s ORDER BY updated_at DESC', (track_type,))
     else:
         cursor.execute('SELECT * FROM tracks ORDER BY updated_at DESC')
     
@@ -468,27 +455,22 @@ def save_track():
         return jsonify({'error': 'track_type and filename are required'}), 400
     
     conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'No database'}), 400
+    
     cursor = conn.cursor()
     
     # Check if track already exists
-    cursor.execute('SELECT id FROM tracks WHERE track_type = ?', (track_type,))
+    cursor.execute('SELECT id FROM tracks WHERE track_type = %s', (track_type,))
     existing = cursor.fetchone()
     
     if existing:
-        # Update existing track
-        cursor.execute('''
-            UPDATE tracks 
-            SET filename = ?, filepath = ?, duration_sec = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE track_type = ?
-        ''', (filename, filepath, duration_sec, track_type))
-        track_id = existing['id']
+        cursor.execute('''UPDATE tracks SET filename = %s, filepath = %s, duration_sec = %s, updated_at = CURRENT_TIMESTAMP WHERE track_type = %s''', (filename, filepath, duration_sec, track_type))
+        track_id = existing[0] if isinstance(existing, tuple) else existing['id']
     else:
-        # Insert new track
-        cursor.execute('''
-            INSERT INTO tracks (track_type, filename, filepath, duration_sec)
-            VALUES (?, ?, ?, ?)
-        ''', (track_type, filename, filepath, duration_sec))
-        track_id = cursor.lastrowid
+        cursor.execute('''INSERT INTO tracks (track_type, filename, filepath, duration_sec) VALUES (%s, %s, %s, %s)''', (track_type, filename, filepath, duration_sec))
+        cursor.execute('SELECT lastval()')
+        track_id = cursor.fetchone()[0]
     
     conn.commit()
     conn.close()
