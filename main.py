@@ -560,6 +560,9 @@ app.debug = False
 def get_settings():
     """Get all settings from database."""
     conn = get_db_connection()
+    if conn is None:
+        return jsonify({'tracks': {}, 'play_events': []})
+    
     cursor = conn.cursor()
     
     # Get tracks
@@ -581,6 +584,86 @@ def get_settings():
         'tracks': tracks,
         'play_events': play_events
     })
+
+@app.route('/api/track_info/<track_type>', methods=['GET'])
+def get_track_info(track_type):
+    """Get track info (filename, url) for frontend."""
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'No database'}), 400
+    
+    cursor = conn.cursor()
+    cursor.execute('SELECT filename, filepath, duration_sec FROM tracks WHERE track_type = ?', (track_type,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row is None:
+        return jsonify({'found': False})
+    
+    return jsonify({
+        'found': True,
+        'filename': row['filename'],
+        'filepath': row['filepath'],
+        'duration_sec': row['duration_sec'],
+        'url': '/api/uploads/' + str(row['filename'])
+    })
+
+@app.route('/api/settings/ad', methods=['POST'])
+def save_ad_settings():
+    """Save ad interval and duration to database."""
+    data = request.json
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    interval_sec = data.get('interval_sec', 180)
+    play_duration_sec = data.get('play_duration_sec', 30)
+    
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'error': 'No database'}), 400
+    
+    cursor = conn.cursor()
+    
+    # Update ad track with duration_sec = play_duration_sec
+    cursor.execute('''
+        UPDATE tracks 
+        SET duration_sec = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE track_type = 'ad'
+    ''', (play_duration_sec,))
+    
+    # Save interval to a settings row
+    cursor.execute('''
+        INSERT OR REPLACE INTO tracks (track_type, filename, filepath, duration_sec, updated_at)
+        VALUES ('ad_interval', 'interval', 'interval', ?, CURRENT_TIMESTAMP)
+    ''', (interval_sec,))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'interval': interval_sec, 'duration': play_duration_sec})
+
+@app.route('/api/settings/ad', methods=['GET'])
+def get_ad_settings():
+    """Get ad interval and duration from database."""
+    conn = get_db_connection()
+    if conn is None:
+        return jsonify({'interval': 180, 'duration': 30})
+    
+    cursor = conn.cursor()
+    
+    # Get interval
+    cursor.execute("SELECT duration_sec FROM tracks WHERE track_type = 'ad_interval'")
+    row = cursor.fetchone()
+    interval = row['duration_sec'] if row else 180
+    
+    # Get play duration from ad track
+    cursor.execute("SELECT duration_sec FROM tracks WHERE track_type = 'ad'")
+    row = cursor.fetchone()
+    duration = row['duration_sec'] if row else 30
+    
+    conn.close()
+    
+    return jsonify({'interval': interval, 'duration': duration})
 
 @app.route('/api/settings', methods=['POST'])
 def save_settings():
