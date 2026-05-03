@@ -404,7 +404,7 @@ def play():
         return jsonify({'error': 'Unknown platform. Please use YouTube or upload local file.'}), 500
 @app.route('/api/upload', methods=['POST'])
 def api_upload_file():
-    """Upload a file."""
+    """Upload a file - saves track info only (not file) for Vercel."""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file part'}), 400
@@ -415,55 +415,22 @@ def api_upload_file():
         track_type = request.form.get('track_type')
         filename = secure_filename(file.filename)
         
-        # Use /tmp for Vercel (writable)
-        upload_folder = '/tmp/uploads'
-        os.makedirs(upload_folder, exist_ok=True)
-        app.config['UPLOAD_FOLDER'] = upload_folder
+        # On Vercel, we can't save files - just save track info to DB
+        result = {'url': '', 'title': filename}
+        result['note'] = 'File will be re-uploaded each session. Track info saved to database.'
         
-        save_path = os.path.join(upload_folder, filename)
-        file.save(save_path)
-        
-        result = {'url': f'/api/uploads/{filename}', 'title': filename}
-        
-        # Try to save to database
-        saved = False
+        # Save track info to Supabase
         if track_type:
-            # Try Supabase REST API first (no psycopg2 needed)
             try:
-                if save_track_to_supabase(track_type, filename, save_path, 0):
-                    saved = True
+                if save_track_to_supabase(track_type, filename, '', 0):
                     result['track_type'] = track_type
                     result['saved_to_db'] = True
                     print(f"Saved to Supabase: {track_type}")
+                else:
+                    result['saved_to_db'] = False
             except Exception as e:
                 print(f"Supabase save error: {e}")
-            
-            # If Supabase didn't work, try Postgres connection
-            if not saved:
-                try:
-                    conn = get_db_connection()
-                    if conn is not None:
-                        cursor = conn.cursor()
-                        db_url = os.environ.get('POSTGRES_URL', '')
-                        if db_url.startswith('postgres'):
-                            # PostgreSQL
-                            cursor.execute('''INSERT INTO tracks (track_type, filename, filepath) VALUES (%s, %s, %s) ON CONFLICT (track_type) DO UPDATE SET filename = %s, filepath = %s, updated_at = CURRENT_TIMESTAMP''', (track_type, filename, save_path, filename, save_path))
-                        else:
-                            # SQLite
-                            cursor.execute('SELECT id FROM tracks WHERE track_type = %s', (track_type,))
-                            existing = cursor.fetchone()
-                            if existing:
-                                cursor.execute('UPDATE tracks SET filename = %s, filepath = %s, updated_at = CURRENT_TIMESTAMP WHERE track_type = %s', (filename, save_path, track_type))
-                            else:
-                                cursor.execute('INSERT INTO tracks (track_type, filename, filepath) VALUES (%s, %s, %s)', (track_type, filename, save_path))
-                        conn.commit()
-                        conn.close()
-                        saved = True
-                        result['track_type'] = track_type
-                        result['saved_to_db'] = True
-                except Exception as e:
-                    print(f"DB save error: {e}")
-                    result['saved_to_db'] = False
+                result['saved_to_db'] = False
         
         return jsonify(result)
     except Exception as e:
