@@ -530,14 +530,13 @@
                 // Track which track is playing
                 if (isPlayingAdvt) {
                     isAdvtPlaying = true;
-                    inPrayer = false;  // Not prayer
+                    inPrayer = false;
                     console.log('Now playing advt track (blob)!');
                 } else if (isPlayingPrayer) {
                     inPrayer = true;
                     isAdvtPlaying = false;
                     console.log('Now playing prayer track!');
                 } else {
-                    // This is the MAIN track - save for resume after advt/prayer
                     inPrayer = false;
                     isAdvtPlaying = false;
                     mainTrackInfo = {...track};
@@ -546,6 +545,33 @@
                     } else {
                         mainPausedTime = player.currentTime || 0;
                     }
+                    console.log('Main track saved for resume: ' + track.title);
+                }
+                
+                document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                return;
+            }
+            
+            // For direct HTTP URLs (Supabase Storage, etc.) - use directly without API
+            if (track.url.startsWith('http')) {
+                player.src = track.url;
+                player.style.display = 'block';
+                const iframe = document.getElementById('youtube-iframe');
+                if (iframe) iframe.src = '';
+                player.play().catch(e => console.error('Play error:', e));
+                
+                if (isPlayingAdvt) {
+                    isAdvtPlaying = true;
+                    inPrayer = false;
+                    console.log('Now playing advt track (direct URL)!');
+                } else if (isPlayingPrayer) {
+                    inPrayer = true;
+                    isAdvtPlaying = false;
+                    console.log('Now playing prayer track!');
+                } else {
+                    inPrayer = false;
+                    isAdvtPlaying = false;
+                    mainTrackInfo = {...track};
                     console.log('Main track saved for resume: ' + track.title);
                 }
                 
