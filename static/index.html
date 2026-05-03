@@ -521,11 +521,19 @@
             
             // Handle Blob URLs (local files)
             if (track.isBlob || track.url.startsWith('blob:')) {
+                console.log('Playing blob URL:', track.url);
                 player.src = track.url;
                 player.style.display = 'block';
                 const iframe = document.getElementById('youtube-iframe');
                 if (iframe) iframe.src = '';
-                player.play().catch(e => console.error('Play error:', e));
+                
+                player.onloadeddata = function() {
+                    console.log('Audio loaded, duration:', player.duration);
+                    player.play().catch(e => console.error('Play error:', e));
+                };
+                player.onerror = function(e) {
+                    console.error('Audio load error:', player.error);
+                };
                 
                 // Track which track is playing
                 if (isPlayingAdvt) {
@@ -554,11 +562,19 @@
             
             // For direct HTTP URLs (Supabase Storage, etc.) - use directly without API
             if (track.url.startsWith('http')) {
+                console.log('Playing direct URL:', track.url);
                 player.src = track.url;
                 player.style.display = 'block';
                 const iframe = document.getElementById('youtube-iframe');
                 if (iframe) iframe.src = '';
-                player.play().catch(e => console.error('Play error:', e));
+                
+                player.onloadeddata = function() {
+                    console.log('Audio loaded, duration:', player.duration);
+                    player.play().catch(e => console.error('Play error:', e));
+                };
+                player.onerror = function(e) {
+                    console.error('Audio load error:', player.error);
+                };
                 
                 if (isPlayingAdvt) {
                     isAdvtPlaying = true;
