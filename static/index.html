@@ -521,20 +521,25 @@
             
             // Handle Blob URLs (local files) or Data URLs
             if (track.isBlob || track.url.startsWith('blob:') || track.url.startsWith('data:')) {
-                console.log('Playing local audio:', track.url.substring(0, 50) + '...');
+                console.log('Playing local audio, url starts:', track.url.substring(0, 30));
                 
-                player.src = track.url;
-                player.style.display = 'block';
-                const iframe = document.getElementById('youtube-iframe');
-                if (iframe) iframe.src = '';
+                // Create NEW audio element to avoid cached errors
+                const newAudio = new Audio(track.url);
+                newAudio.style.display = 'block';
                 
-                player.onloadeddata = function() {
-                    console.log('Audio loaded, duration:', player.duration);
-                    player.play().catch(e => console.error('Play error:', e));
+                // Copy events from old player
+                newAudio.onloadeddata = function() {
+                    console.log('Audio loaded OK, duration:', newAudio.duration);
+                    newAudio.play().catch(e => console.error('Play error:', e));
                 };
-                player.onerror = function(e) {
-                    console.error('Audio load error:', player.error, 'code:', player.error ? player.error.code : 'none');
+                newAudio.onerror = function(e) {
+                    console.error('Audio load error:', newAudio.error);
                 };
+                
+                // Replace player
+                const oldPlayer = document.getElementById('audio-player');
+                oldPlayer.parentNode.replaceChild(newAudio, oldPlayer);
+                newAudio.id = 'audio-player';
                 
                 // Track which track is playing
                 if (isPlayingAdvt) {
