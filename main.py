@@ -25,42 +25,36 @@ import json as json_lib
 DB_PATH = None  # Will be set lazily
 
 def _get_db_path():
-    """Get DB path lazily."""
+    """Get DB path."""
     global DB_PATH
     if DB_PATH is None:
-        # Use a temp path for local development
-        db_path = os.environ.get('DATABASE_URL', '')
-        if db_path and db_path.startswith('postgres'):
-            DB_PATH = db_path
+        db_url = os.environ.get('DATABASE_URL', '')
+        if db_url.startswith('postgres'):
+            DB_PATH = db_url
         else:
             DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'player.db')
     return DB_PATH
 
 def get_db_connection():
-    """Get a database connection - works with both local SQLite and Vercel Postgres.
-    Returns None if running on Vercel without DATABASE_URL."""
-    
-    # Skip if running on Vercel without DATABASE_URL
-    if os.environ.get('VERCEL') == '1':
-        db_url = os.environ.get('DATABASE_URL', '')
-        if not db_url:
-            return None  # No database available
-    
+    """Get a database connection."""
     db_url = os.environ.get('DATABASE_URL', '')
     
-    if db_url and db_url.startswith('postgres'):
-        # Vercel Postgres - would need psycopg2
+    if db_url.startswith('postgres'):
         try:
             import psycopg2
             return psycopg2.connect(db_url)
         except ImportError:
             pass
     
-    # Local SQLite only - NOT for Vercel serverless
-    db_path = _get_db_path()
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Local SQLite 
+    try:
+        db_path = _get_db_path()
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"DB connection error: {e}")
+        return None
 
 def is_db_available() -> bool:
     """Check if database is available."""

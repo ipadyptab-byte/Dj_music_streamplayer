@@ -689,7 +689,7 @@
         // Upload advt file - saves to database
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
-            if (!fileInput.files.length) return;
+            if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
             // Upload to server with track_type
@@ -706,9 +706,10 @@
                 
                 if (data.url) {
                     advtTrack = { title: data.title, url: data.url, platform: 'Local' };
-                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                    var statusEl = document.getElementById('advt-status');
+                    if (statusEl) statusEl.innerText = 'Advt: ' + advtTrack.title;
                     alert('Advt track saved to database!');
-                    startAdvtTimer();
+                    if (advtTrack) startAdvtTimer();
                 }
             } catch(e) {
                 console.error(e);
@@ -719,9 +720,10 @@
         // Upload prayer file - saves to database
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
-            if (!fileInput.files.length) return;
+            if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
-            prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
+            var prayerTimesEl = document.getElementById('prayer-times');
+            prayerTimes = prayerTimesEl ? prayerTimesEl.value.split(',').map(t => t.trim()) : [];
             
             // Upload to server with track_type
             const formData = new FormData();
@@ -737,9 +739,10 @@
                 
                 if (data.url) {
                     prayerTrack = { title: data.title, url: data.url, platform: 'Local' };
-                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                    var statusEl = document.getElementById('prayer-status');
+                    if (statusEl) statusEl.innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
                     alert('Prayer track saved to database!');
-                    startPrayerChecker();
+                    if (prayerTrack) startPrayerChecker();
                 }
             } catch(e) {
                 console.error(e);
@@ -974,7 +977,8 @@
                 var advtData = await advtResp.json();
                 if (advtData.found && advtData.url) {
                     advtTrack = { title: advtData.filename, url: advtData.url, platform: 'Local' };
-                    document.getElementById('advt-status').innerText = 'Advt: ' + advtData.filename;
+                    var statusEl = document.getElementById('advt-status');
+                    if (statusEl) statusEl.innerText = 'Advt: ' + advtData.filename;
                     console.log('Loaded advt track:', advtData.filename);
                 }
                 
@@ -983,27 +987,22 @@
                 var prayerData = await prayerResp.json();
                 if (prayerData.found && prayerData.url) {
                     prayerTrack = { title: prayerData.filename, url: prayerData.url, platform: 'Local' };
-                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerData.filename;
+                    var prayerStatusEl = document.getElementById('prayer-status');
+                    if (prayerStatusEl) prayerStatusEl.innerText = 'Prayer: ' + prayerData.filename;
                     console.log('Loaded prayer track:', prayerData.filename);
                 }
                 
                 // Load interval and duration from database
                 var settingsResp = await fetch('/api/settings/ad');
                 var settingsData = await settingsResp.json();
-                if (settingsData.interval) {
-                    document.getElementById('advt-interval').value = settingsData.interval;
-                }
-                if (settingsData.duration) {
-                    document.getElementById('advt-duration').value = settingsData.duration;
-                }
+                var intervalEl = document.getElementById('advt-interval');
+                var durationEl = document.getElementById('advt-duration');
+                if (intervalEl && settingsData.interval) intervalEl.value = settingsData.interval;
+                if (durationEl && settingsData.duration) durationEl.value = settingsData.duration;
                 
                 // Start timers if tracks are loaded
-                if (advtTrack) {
-                    startAdvtTimer();
-                }
-                if (prayerTrack) {
-                    startPrayerChecker();
-                }
+                if (advtTrack) startAdvtTimer();
+                if (prayerTrack) startPrayerChecker();
                 
             } catch(e) {
                 console.error('Failed to load from database:', e);
