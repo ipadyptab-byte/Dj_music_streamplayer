@@ -87,41 +87,42 @@ def get_s3_credentials():
     }
 
 def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
-    """Upload file to Supabase Storage via S3."""
+    """Upload file to Supabase Storage."""
     try:
         import boto3
         from botocore.config import Config
         
         creds = get_s3_credentials()
-        supabase_url = get_supabase_url()
         
-        # Create S3 client
+        # Create S3 client with correct region for Supabase
         s3_client = boto3.client(
             's3',
             aws_access_key_id=creds['access_key'],
             aws_secret_access_key=creds['secret_key'],
-            region_name=creds['region'],
-            config=Config(signature_version='s3v4')
+            region_name='us-east-1',
+            config=Config(signature_version='s3v4', retries={'max_attempts': 3})
         )
         
-        # Use the full S3 endpoint from Supabase
-        bucket = 'tracks'
+        supabase_url = get_supabase_url()
         
+        # Upload to Supabase storage bucket
         s3_client.put_object(
-            Bucket='bspqpazygolpzfykckip',
+            Bucket='bspqpazygolpzfykckip',  # Your Supabase project ID
             Key=f'tracks/{filename}',
             Body=file_data,
             ContentType='audio/mpeg',
             ACL='public-read'
         )
         
-        # Return Supabase storage URL
-        return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
+        # Return public URL
+        if supabase_url:
+            return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
+        return f"https://bspqpazygolpzfykckip.s3.amazonaws.com/tracks/{filename}"
         
     except ImportError:
         print("boto3 not installed")
     except Exception as e:
-        print(f"S3 upload error: {e}")
+        print(f"S3 upload error: {type(e).__name__}: {e}")
     
     return None
 

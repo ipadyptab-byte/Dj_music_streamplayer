@@ -740,91 +740,99 @@
             } catch(e) { console.error(e); }
         }
         
-        // Upload advt file - use Data URL (base64 encoded)
+        // Upload advt file - upload to server (Supabase Storage)
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Validate file type from extension
             const ext = file.name.split('.').pop().toLowerCase();
-            let mimeType = 'audio/mpeg';
-            if (ext === 'wav') mimeType = 'audio/wav';
-            else if (ext === 'ogg') mimeType = 'audio/ogg';
-            else if (ext === 'm4a') mimeType = 'audio/mp4';
-            else if (ext === 'webm') mimeType = 'audio/webm';
-            else if (ext !== 'mp3') {
-                alert('Please use MP3, WAV, OGG, or M4A file');
+            if (ext !== 'mp3' && ext !== 'wav' && ext !== 'ogg') {
+                alert('Please use MP3 file');
                 return;
             }
             
-            // Convert to base64 data URL
-            const base64 = await fileToDataURL(file, mimeType);
+            alert('Uploading...');
             
-            advtTrack = { 
-                title: file.name, 
-                url: base64, 
-                platform: 'Local',
-                isBlob: true 
-            };
+            // Upload to server
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('track_type', 'ad');
             
-            var statusEl = document.getElementById('advt-status');
-            if (statusEl) statusEl.innerText = 'Advt: ' + advtTrack.title;
-            alert('Advt track loaded!');
-            
-            startAdvtTimer();
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                console.log('Upload response:', data);
+                
+                if (data.url) {
+                    advtTrack = { 
+                        title: data.title, 
+                        url: data.url, 
+                        platform: 'Local',
+                        isBlob: false 
+                    };
+                    
+                    var statusEl = document.getElementById('advt-status');
+                    if (statusEl) statusEl.innerText = 'Advt: ' + advtTrack.title;
+                    alert('Advt track saved!');
+                    startAdvtTimer();
+                } else {
+                    alert('Upload failed. Check console.');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Upload error: ' + e);
+            }
         }
         
-        // Upload prayer file - use Data URL (base64 encoded)
+        // Upload prayer file - upload to server (Supabase Storage)
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
             if (!fileInput || !fileInput.files.length) return;
             const file = fileInput.files[0];
             
-            // Validate file type from extension
             const ext = file.name.split('.').pop().toLowerCase();
-            let mimeType = 'audio/mpeg';
-            if (ext === 'wav') mimeType = 'audio/wav';
-            else if (ext === 'ogg') mimeType = 'audio/ogg';
-            else if (ext === 'm4a') mimeType = 'audio/mp4';
-            else if (ext === 'webm') mimeType = 'audio/webm';
-            else if (ext !== 'mp3') {
-                alert('Please use MP3, WAV, OGG, or M4A file');
+            if (ext !== 'mp3' && ext !== 'wav' && ext !== 'ogg') {
+                alert('Please use MP3 file');
                 return;
             }
             
-            // Convert to base64 data URL
-            const base64 = await fileToDataURL(file, mimeType);
+            alert('Uploading...');
             
-            prayerTrack = { 
-                title: file.name, 
-                url: base64, 
-                platform: 'Local',
-                isBlob: true 
-            };
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('track_type', 'prayer');
             
-            var statusEl = document.getElementById('prayer-status');
-            if (statusEl) statusEl.innerText = 'Prayer: ' + prayerTrack.title;
-            alert('Prayer track loaded!');
-            
-            startPrayerChecker();
-        }
-        
-        // Helper: convert file to base64 data URL
-        function fileToDataURL(file, mimeType) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = function() {
-                    console.log('FileReader result type:', typeof reader.result);
-                    console.log('FileReader starts:', reader.result.substring(0, 50));
-                    resolve(reader.result);
-                };
-                reader.onerror = function(e) {
-                    console.error('FileReader error:', e);
-                    reject(e);
-                };
-                reader.readAsDataURL(file);
-            });
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                console.log('Upload response:', data);
+                
+                if (data.url) {
+                    prayerTrack = { 
+                        title: data.title, 
+                        url: data.url, 
+                        platform: 'Local',
+                        isBlob: false 
+                    };
+                    
+                    var statusEl = document.getElementById('prayer-status');
+                    if (statusEl) statusEl.innerText = 'Prayer: ' + prayerTrack.title;
+                    alert('Prayer track saved!');
+                    startPrayerChecker();
+                } else {
+                    alert('Upload failed. Check console.');
+                }
+            } catch(e) {
+                console.error(e);
+                alert('Upload error: ' + e);
+            }
         }
         
         // Save Ad Settings
