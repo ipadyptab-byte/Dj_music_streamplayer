@@ -79,9 +79,16 @@ def get_service_key():
 
 def get_s3_credentials():
     """Get S3 credentials for storage."""
+    # Get from Vercel env vars
+    access_key = os.environ.get('AWS_ACCESS_KEY_ID', '')
+    secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
+    
+    if not access_key or not secret_key:
+        print("WARNING: AWS credentials not configured in Vercel")
+    
     return {
-        'access_key': os.environ.get('AWS_ACCESS_KEY_ID') or 'fc6fc6fe6b82f7284d03ab8c882e3798',
-        'secret_key': os.environ.get('AWS_SECRET_ACCESS_KEY') or 'aceb7ec784093b5436940ea0c48a54a001804898f1e88d9abff5976331d28be2',
+        'access_key': access_key,
+        'secret_key': secret_key,
         'region': 'us-east-1',
         'bucket': 'tracks'
     }
@@ -94,18 +101,23 @@ def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
         
         creds = get_s3_credentials()
         
-        # Create S3 client with correct region for Supabase
+        if not creds['access_key'] or not creds['secret_key']:
+            print("ERROR: AWS credentials not set")
+            return None
+        
+        print(f"Uploading {filename} to Supabase Storage...")
+        
+        # Create S3 client
         s3_client = boto3.client(
             's3',
             aws_access_key_id=creds['access_key'],
             aws_secret_access_key=creds['secret_key'],
-            region_name='us-east-1',
-            config=Config(signature_version='s3v4', retries={'max_attempts': 3})
+            region_name='us-east-1'
         )
         
         supabase_url = get_supabase_url()
         
-        # Upload to Supabase storage bucket
+        # Upload to Supabase storage bucket (use project ID as bucket name)
         s3_client.put_object(
             Bucket='bspqpazygolpzfykckip',  # Your Supabase project ID
             Key=f'tracks/{filename}',
@@ -115,9 +127,7 @@ def upload_file_to_supabase_storage(filename: str, file_data: bytes) -> str:
         )
         
         # Return public URL
-        if supabase_url:
-            return f"{supabase_url}/storage/v1/object/public/tracks/{filename}"
-        return f"https://bspqpazygolpzfykckip.s3.amazonaws.com/tracks/{filename}"
+        return f"https://bspqpazygolpzfykckip.supabase.co/storage/v1/object/public/tracks/{filename}"
         
     except ImportError:
         print("boto3 not installed")
