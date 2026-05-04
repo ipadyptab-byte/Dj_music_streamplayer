@@ -932,10 +932,7 @@
             var intervalEl = document.getElementById('advt-interval');
             var durationEl = document.getElementById('advt-duration');
             
-            if (!enabled || !intervalEl || !durationEl) {
-                console.log('Elements not ready yet');
-                return;
-            }
+            if (!enabled || !intervalEl || !durationEl) return;
             
             var enabled = enabled.checked;
             var interval = parseInt(intervalEl.value) || 300;
@@ -956,68 +953,67 @@
                 return;
             }
             
-            // Use a 1-second interval for precise control
+            // Start countdown timer
             advtTimer = setInterval(function() {
-                // Check conditions
-                if (!mainTrackInfo) {
-                    // Reset counter when no main track
-                    advtIntervalCounter = -1;
-                    return;
-                }
-                
+                // Check if main track is playing
                 var player = document.getElementById('audio-player');
                 var audioPlaying = !player.paused && !player.ended;
                 var youtubePlaying = isYouTubePlaying && window.ytPlayer && window.ytPlayer.getPlayerState() === 1;
                 var isPlaying = audioPlaying || youtubePlaying;
                 
-                // Check if ad finished playing (state -2 means ad was playing)
-                if (advtIntervalCounter === -2 && !isPlaying && mainTrackInfo) {
-                    // Ad ended - resume main track from saved position
-                    console.log('Advt ended - resuming main from ' + mainPausedTime);
-                    advtIntervalCounter = -3;  // Temporary state while resuming
-                    // Resume main track
-                    playTrack(mainTrackInfo);
-                    player.currentTime = mainPausedTime;
-                    // After short delay, restart countdown
-                    setTimeout(() => {
-                        console.log('Restarting advt interval countdown...');
-                        advtIntervalCounter = interval;
-                    }, 1000);
-                    return;  // Skip rest of this cycle
-                }
-                
-                // Initialize counter when main track first starts playing
+                // When main track STARTS first time, start countdown
                 if (advtIntervalCounter === -1 && isPlaying) {
-                    console.log('Main track started - starting advt interval countdown');
+                    console.log('Main track started - starting advt countdown from ' + interval);
                     advtIntervalCounter = interval;
+                    return;
                 }
                 
-                // Countdown if active
+                // If no main track, reset
+                if (!mainTrackInfo) {
+                    advtIntervalCounter = -1;
+                    return;
+                }
+                
+                // After ad finishes (-2 state), resume main and restart countdown
+                if (advtIntervalCounter === -2) {
+                    if (!isPlaying && mainTrackInfo) {
+                        // Resume main track
+                        playTrack(mainTrackInfo);
+                        if (player) player.currentTime = mainPausedTime;
+                        console.log('Ad done - resuming main, restart countdown');
+                        advtIntervalCounter = interval;
+                    }
+                    return;
+                }
+                
+                // Countdown
                 if (advtIntervalCounter > 0) {
                     advtIntervalCounter--;
-                    // Only log occasionally to avoid spam
                     if (advtIntervalCounter % 30 === 0 || advtIntervalCounter === interval) {
-                        console.log('Advt countdown: ' + advtIntervalCounter + 's remaining');
+                        console.log('Advt countdown: ' + advtIntervalCounter + 's');
                     }
                 }
                 
                 // Time to play ad!
                 if (advtIntervalCounter === 0 && isPlaying && !isAdvtPlaying) {
                     console.log('Playing advt now!');
-                    advtPlayCount++;
-                    advtIntervalCounter = -2;  // Mark as waiting for ad to finish
+                    advtIntervalCounter = -2;  // Mark ad is playing
                     
-                    // Pause current player
+                    // Pause main
                     if (youtubePlaying && window.ytPlayer) {
+                        mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
                         window.ytPlayer.pauseVideo();
                     } else {
+                        mainPausedTime = player.currentTime || 0;
                         player.pause();
                     }
+                    
+                    // Play ad
                     playTrack(advtTrack);
                 }
             }, 1000);
             
-            console.log('Advt timer STARTED with countdown!');
+            console.log('Advt timer STARTED! countdown=' + interval + 's');
         }
         
         // Start prayer time checker
