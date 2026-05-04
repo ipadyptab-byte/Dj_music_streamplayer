@@ -566,8 +566,8 @@
                 return;
             }
             
-            // For direct HTTP URLs (Supabase Storage, etc.) - use directly without API
-            if (track.url.startsWith('http')) {
+            // For direct HTTP URLs (Supabase Storage, etc.) - but NOT YouTube
+            if (track.url.startsWith('http') && !track.url.includes('youtube.com') && !track.url.includes('youtu.be')) {
                 console.log('Playing direct URL:', track.url);
                 player.src = track.url;
                 player.style.display = 'block';
