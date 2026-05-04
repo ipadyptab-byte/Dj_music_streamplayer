@@ -508,7 +508,7 @@
             `).join('');
         }
         
-        async function playTrack(track) {
+        async function playTrack(track, autoPlay = true) {
             currentTrack = track;
             currentTrackTitle = track.title;
             document.getElementById('current-track').innerText = 'Loading: ' + track.title;
@@ -530,7 +530,9 @@
                 // Copy events from old player
                 newAudio.onloadeddata = function() {
                     console.log('Audio loaded OK, duration:', newAudio.duration);
-                    newAudio.play().catch(e => console.error('Play error:', e));
+                    if (autoPlay) {
+                        newAudio.play().catch(e => console.error('Play error:', e));
+                    }
                 };
                 newAudio.onerror = function(e) {
                     console.error('Audio load error:', newAudio.error);
@@ -576,7 +578,9 @@
                 
                 player.onloadeddata = function() {
                     console.log('Audio loaded, duration:', player.duration);
-                    player.play().catch(e => console.error('Play error:', e));
+                    if (autoPlay) {
+                        player.play().catch(e => console.error('Play error:', e));
+                    }
                 };
                 player.onerror = function(e) {
                     console.error('Audio load error:', player.error);
@@ -996,10 +1000,9 @@
                 
                 // Time to play ad!
                 if (advtIntervalCounter === 0 && isPlaying && !isAdvtPlaying) {
-                    console.log('Playing advt now!');
-                    advtIntervalCounter = -2;  // Mark ad is playing
+                    console.log('Playing advt now - pausing main!');
                     
-                    // Pause main
+                    // Save position and PAUSE main first
                     if (youtubePlaying && window.ytPlayer) {
                         mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
                         window.ytPlayer.pauseVideo();
@@ -1008,8 +1011,10 @@
                         player.pause();
                     }
                     
-                    // Play ad
-                    playTrack(advtTrack);
+                    advtIntervalCounter = -2;  // Mark ad is playing
+                    
+                    // Play ad (autoPlay=true by default)
+                    playTrack(advtTrack, true);
                 }
             }, 1000);
             
