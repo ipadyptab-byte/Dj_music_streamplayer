@@ -1170,20 +1170,25 @@
                 document.getElementById('current-clock').innerText = now.toLocaleTimeString();
             }, 1000);
             
-            // Player ended event - resume main after advt
+            // Player ended event - for main track play next, for ad resume main
             var player = document.getElementById('audio-player');
             player.addEventListener('ended', function() {
                 if (isAdvtPlaying && mainTrackInfo) {
-                    console.log('Advt ended (event), resuming main');
-                    const wasAdvt = isAdvtPlaying;
+                    // Ad ended - resume main track
+                    console.log('Advt ended, resuming main');
                     isAdvtPlaying = false;
                     setTimeout(function() {
-                        if (wasAdvt && mainTrackInfo) {
-                            console.log('Resuming main track: ' + mainTrackInfo.title);
-                            playTrack(mainTrackInfo);
-                            player.currentTime = mainPausedTime;
-                        }
+                        playTrack(mainTrackInfo);
+                        player.currentTime = mainPausedTime;
                     }, 500);
+                    return;
+                }
+                
+                // Main track ended - play next random track
+                if (searchResults.length > 0 && !inPrayer) {
+                    const randomIndex = Math.floor(Math.random() * searchResults.length);
+                    console.log('Main ended, playing next random track: ' + randomIndex);
+                    playTrack(searchResults[randomIndex]);
                 }
             });
             
