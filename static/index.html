@@ -1174,53 +1174,43 @@
             // Player ended event - for main track play next, for ad resume main
             var player = document.getElementById('audio-player');
             player.addEventListener('ended', function() {
+                console.log('Audio ended, isAdvtPlaying=' + isAdvtPlaying + ', inPrayer=' + inPrayer);
+                
                 if (isAdvtPlaying && mainTrackInfo) {
                     // Ad ended - resume main track
-                    console.log('Advt ended, resuming main');
+                    console.log('Advt ended, resuming main at: ' + mainPausedTime);
                     isAdvtPlaying = false;
                     setTimeout(function() {
                         playTrack(mainTrackInfo);
-                        player.currentTime = mainPausedTime;
+                        setTimeout(function() {
+                            player.currentTime = mainPausedTime;
+                        }, 500);
                     }, 500);
                     return;
                 }
                 
-                // Main track ended - play next random track
-                if (searchResults.length > 0 && !inPrayer) {
+                if (inPrayer && mainTrackInfo) {
+                    // Prayer ended - resume main track
+                    console.log('Prayer ended, resuming main');
+                    inPrayer = false;
+                    setTimeout(function() {
+                        playTrack(mainTrackInfo);
+                        setTimeout(function() {
+                            player.currentTime = mainPausedTime;
+                        }, 500);
+                    }, 500);
+                    return;
+                }
+                
+                // Main track ended - play next random track ONLY if not ad or prayer
+                if (searchResults.length > 0 && !isAdvtPlaying && !inPrayer) {
                     const randomIndex = Math.floor(Math.random() * searchResults.length);
-                    console.log('Main ended, playing next random track: ' + randomIndex);
+                    console.log('Main ended, playing next: ' + randomIndex);
                     playTrack(searchResults[randomIndex]);
                 }
             });
             
-            // Periodically check if ad finished playing (fallback for reliable detection)
-            setInterval(function() {
-                if (isAdvtPlaying) {
-                    var audioPlaying = !player.paused && !player.ended;
-                    if (!audioPlaying) {
-                        // Ad stopped - check if it was actually playing via playCount
-                        if (advtPlayCount > 0 && advtPlayCount === advtPlayFinished) {
-                            // Ad finished - resume main
-                            console.log('Advt ended (poll), resuming main');
-                            const wasAdvt = isAdvtPlaying;
-                            isAdvtPlaying = false;
-                            if (mainTrackInfo) {
-                                console.log('Resuming main track: ' + mainTrackInfo.title);
-                                playTrack(mainTrackInfo);
-                                player.currentTime = mainPausedTime;
-                            }
-                        }
-                    }
-                }
-            }, 1000);
-            
             restoreSettings();
-            // Delay timer start to ensure elements exist
-            setTimeout(function() {
-                startAdvtTimer();
-                startPrayerChecker();
-            }, 100);
-            
             document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
             document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
         };
