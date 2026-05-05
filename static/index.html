@@ -664,7 +664,12 @@
                 if (results.length > 0) {
                     advtTrack = results[0];
                     document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-                    localStorage.setItem('advtTrack', JSON.stringify(advtTrack));
+                    // Save to database instead of localStorage
+                    await fetch('/api/settings/advt', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({track: advtTrack})
+                    });
                 }
             } catch(e) { console.error(e); }
         }
@@ -680,8 +685,12 @@
                     prayerTrack = results[0];
                     prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
                     document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-                    localStorage.setItem('prayerTrack', JSON.stringify(prayerTrack));
-                    localStorage.setItem('prayerTimes', JSON.stringify(prayerTimes));
+                    // Save to database instead of localStorage
+                    await fetch('/api/settings/prayer', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({track: prayerTrack, times: prayerTimes})
+                    });
                 }
             } catch(e) { console.error(e); }
         }
@@ -694,7 +703,13 @@
             const url = URL.createObjectURL(file);
             advtTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
             document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-            alert('Advt track loaded! Note: Re-upload after page refresh.');
+            // Save to database
+            fetch('/api/settings/advt', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({track: advtTrack})
+            });
+            alert('Advt track loaded!');
             // Restart timer if enabled
             startAdvtTimer();
         }
@@ -708,7 +723,13 @@
             prayerTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
             prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
             document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-            alert('Prayer track loaded! Note: Re-upload after page refresh.');
+            // Save to database
+            fetch('/api/settings/prayer', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({track: prayerTrack, times: prayerTimes})
+            });
+            alert('Prayer track loaded!');
             startPrayerChecker();
         }
         
@@ -725,7 +746,8 @@
         
         function deleteAdvt() {
             advtTrack = null;
-            localStorage.removeItem('advtTrack');
+            // Remove from database
+            fetch('/api/settings/advt', {method: 'DELETE'}).catch(e => {});
             document.getElementById('advt-status').innerText = 'No advt track set';
         }
         
@@ -743,8 +765,8 @@
         function deletePrayer() {
             prayerTrack = null;
             prayerTimes = [];
-            localStorage.removeItem('prayerTrack');
-            localStorage.removeItem('prayerTimes');
+            // Remove from database
+            fetch('/api/settings/prayer', {method: 'DELETE'}).catch(e => {});
             document.getElementById('prayer-status').innerText = 'No prayer track set';
         }
         
@@ -890,34 +912,26 @@
             }, 1000);
         }
         
-        // Restore saved tracks (skip invalid blobs from old sessions)
-        function restoreSettings() {
-            const savedAdvt = localStorage.getItem('advtTrack');
-            if (savedAdvt) {
-                try {
-                    var advt = JSON.parse(savedAdvt);
-                    // Check if blob URL is valid (starts with blob:)
-                    if (advt.url && advt.url.startsWith('blob:')) {
-                        console.log('Skipping old blob URL');
-                    } else {
-                        advtTrack = advt;
-                        document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-                    }
-                } catch(e) { console.error(e); }
-            }
-            const savedPrayer = localStorage.getItem('prayerTrack');
-            const savedTimes = localStorage.getItem('prayerTimes');
-            if (savedPrayer && savedTimes) {
-                try {
-                    var prayer = JSON.parse(savedPrayer);
-                    prayerTimes = JSON.parse(savedTimes);
-                    if (prayer.url && prayer.url.startsWith('blob:')) {
-                        console.log('Skipping old blob URL');
-                    } else {
-                        prayerTrack = prayer;
-                        document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-                    }
-                } catch(e) { console.error(e); }
+        // Restore saved tracks from database
+        async function restoreSettings() {
+            try {
+                // Load advt track
+                const advtRes = await fetch('/api/settings/advt');
+                const advtData = await advtRes.json();
+                if (advtData && advtData.track) {
+                    advtTrack = advtData.track;
+                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                }
+                // Load prayer track
+                const prayerRes = await fetch('/api/settings/prayer');
+                const prayerData = await prayerRes.json();
+                if (prayerData && prayerData.track) {
+                    prayerTrack = prayerData.track;
+                    prayerTimes = prayerData.times || [];
+                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                }
+            } catch(e) {
+                console.error('Error loading settings:', e);
             }
         }
         

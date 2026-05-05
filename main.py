@@ -5,10 +5,39 @@ import os
 import sys
 import webbrowser
 from threading import Timer
+from supabase import create_client, Client
+
 try:
     import pytube
 except ImportError:
     pytube = None
+
+# ===============================
+# Supabase database setup
+# ===============================
+SUPABASE_URL = os.environ.get('NEXT_PUBLIC_SUPABASE_URL', 'https://pgzgyhhldijveoykszhz.supabase.co')
+SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnemd5aGhsZGlqdmVveWtzemh6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTg3NjYxMCwiZXhwIjoyMDkxNDUyNjEwfQ.N-extU8G4pnGiD_m3wiFR1f4LHav1Brq_k-bgv0LYF0')
+
+supabase: Client = None
+
+def init_supabase():
+    global supabase
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Create settings table if not exists (ignore errors - table may already exist)
+        try:
+            supabase.postgrest.execute_sql('''
+                CREATE TABLE IF NOT EXISTS settings (
+                    id SERIAL PRIMARY KEY,
+                    key TEXT UNIQUE NOT NULL,
+                    value JSONB,
+                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                )
+            ''')
+        except Exception as e:
+            print(f"Table creation note: {e}")
+    except Exception as e:
+        print(f"Supabase init error: {e}")
 
 # ===============================
 # PyInstaller-safe base directory
@@ -26,6 +55,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
+
+# Initialize Supabase
+init_supabase()
 
 # ===============================
 # Auto-open browser
@@ -264,6 +296,46 @@ def api_uploaded_file(filename):
 def list_files():
     files = os.listdir(app.config['UPLOAD_FOLDER'])
     return jsonify([{'title': f, 'url': f'/api/uploads/{f}'} for f in files])
+@app.route('/api/delete', methods=['POST'])
+# ===============================
+# Settings API (Supabase database)
+# ===============================
+@app.route('/api/settings/<key>', methods=['GET'])
+def get_setting(key):
+    """Get setting from database"""
+    if not supabase:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        result = supabase.table('settings').select('value').eq('key', key).execute()
+        if result.data and len(result.data) > 0:
+            return jsonify(result.data[0]['value'])
+        return jsonify(None)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings/<key>', methods=['POST'])
+def save_setting(key):
+    """Save setting to database"""
+    if not supabase:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        value = request.json
+        supabase.table('settings').upsert({'key': key, 'value': value}, on_conflict='key').execute()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/settings/<key>', methods=['DELETE'])
+def delete_setting(key):
+    """Delete setting from database"""
+    if not supabase:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        supabase.table('settings').delete().eq('key', key).execute()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/delete', methods=['POST'])
 def delete_file():
     filename = secure_filename(request.json.get('filename', ''))
