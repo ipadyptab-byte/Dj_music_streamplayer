@@ -936,7 +936,7 @@
         }
         
         // Initialize on page load
-        window.onload = function() {
+        window.onload = async function() {
             // Clock update
             setInterval(function() {
                 var now = new Date();
@@ -981,7 +981,7 @@
                 }
             }, 1000);
             
-            restoreSettings();
+            await restoreSettings();
             startAdvtTimer();
             startPrayerChecker();
             
