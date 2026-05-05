@@ -922,6 +922,12 @@
                     advtTrack = advtData.track;
                     document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
                 }
+                if (advtData && advtData.enabled) {
+                    document.getElementById('advt-enabled').checked = advtData.enabled;
+                }
+                if (advtData && advtData.interval) {
+                    document.getElementById('advt-interval').value = advtData.interval;
+                }
                 // Load prayer track
                 const prayerRes = await fetch('/api/settings/prayer');
                 const prayerData = await prayerRes.json();
@@ -929,6 +935,12 @@
                     prayerTrack = prayerData.track;
                     prayerTimes = prayerData.times || [];
                     document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                }
+                if (prayerData && prayerData.enabled) {
+                    document.getElementById('prayer-enabled').checked = prayerData.enabled;
+                }
+                if (prayerData && prayerData.times) {
+                    document.getElementById('prayer-times').value = prayerData.times.join(',');
                 }
             } catch(e) {
                 console.error('Error loading settings:', e);
@@ -985,8 +997,64 @@
             startAdvtTimer();
             startPrayerChecker();
             
-            document.getElementById('advt-enabled').addEventListener('change', startAdvtTimer);
-            document.getElementById('prayer-enabled').addEventListener('change', startPrayerChecker);
+            document.getElementById('advt-enabled').addEventListener('change', function() {
+                startAdvtTimer();
+                // Save enabled state
+                if (advtTrack) {
+                    fetch('/api/settings/advt', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            track: advtTrack,
+                            enabled: this.checked,
+                            interval: document.getElementById('advt-interval').value
+                        })
+                    });
+                }
+            });
+            document.getElementById('prayer-enabled').addEventListener('change', function() {
+                startPrayerChecker();
+                // Save enabled state
+                if (prayerTrack) {
+                    fetch('/api/settings/prayer', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            track: prayerTrack,
+                            times: prayerTimes,
+                            enabled: this.checked
+                        })
+                    });
+                }
+            });
+            // Also save interval when changed
+            document.getElementById('advt-interval').addEventListener('change', function() {
+                if (advtTrack) {
+                    fetch('/api/settings/advt', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            track: advtTrack,
+                            enabled: document.getElementById('advt-enabled').checked,
+                            interval: this.value
+                        })
+                    });
+                }
+            });
+            document.getElementById('prayer-times').addEventListener('change', function() {
+                prayerTimes = this.value.split(',').map(t => t.trim());
+                if (prayerTrack) {
+                    fetch('/api/settings/prayer', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            track: prayerTrack,
+                            times: prayerTimes,
+                            enabled: document.getElementById('prayer-enabled').checked
+                        })
+                    });
+                }
+            });
         };
     </script>
 </body>
