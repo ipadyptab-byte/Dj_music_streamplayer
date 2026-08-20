@@ -4,8 +4,7 @@
       "src": "main.py",
       "use": "@vercel/python",
       "config": {
-        "installCommand": "pip install flask>=3.1.2 werkzeug>=3.1.2 yt-dlp>=2025.12.8 supabase>=2.0.0 pytube",
-        "pythonVersion": "3.11"
+        "installCommand": "pip install flask werkzeug yt-dlp supabase pytube"
       }
     }
   ],
