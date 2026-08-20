@@ -368,6 +368,66 @@ def delete_setting(key):
         return jsonify({'error': str(e)}), 500
 
 # ===============================
+# Persistent Tracks API (stored in database)
+# ===============================
+@app.route('/api/tracks', methods=['GET'])
+def get_tracks():
+    """Get all saved tracks from database"""
+    db = get_supabase()
+    if not db:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        result = db.table('settings').select('key, value').like('key', 'track_%').execute()
+        tracks = {}
+        for row in result.data:
+            tracks[row['key']] = row['value']
+        return jsonify(tracks)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tracks/<track_type>', methods=['GET'])
+def get_track(track_type):
+    """Get a specific track (advt or prayer)"""
+    db = get_supabase()
+    if not db:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        key = f'track_{track_type}'
+        result = db.table('settings').select('value').eq('key', key).execute()
+        if result.data and len(result.data) > 0:
+            return jsonify(result.data[0]['value'])
+        return jsonify(None)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tracks/<track_type>', methods=['POST'])
+def save_track(track_type):
+    """Save a track (advt or prayer) to database"""
+    db = get_supabase()
+    if not db:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        track_data = request.json
+        key = f'track_{track_type}'
+        db.table('settings').upsert({'key': key, 'value': track_data}, on_conflict='key').execute()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tracks/<track_type>', methods=['DELETE'])
+def delete_track(track_type):
+    """Delete a track from database"""
+    db = get_supabase()
+    if not db:
+        return jsonify({'error': 'Database not connected'}), 500
+    try:
+        key = f'track_{track_type}'
+        db.table('settings').delete().eq('key', key).execute()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ===============================
 # App start
 # ===============================
 # Vercel uses the app object directly, only run locally
