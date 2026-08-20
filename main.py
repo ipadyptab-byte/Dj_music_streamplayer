@@ -2,41 +2,32 @@ from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
 import os
 import sys
+import json
 
 # Only import these for local development
 if os.environ.get('VERCEL') != '1':
     import webbrowser
     from threading import Timer
 
-# Lazy imports for serverless compatibility
-yt_dlp = None
-supabase = None
-Client = None
-pytube = None
+# Conditional imports for serverless
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
 
-def lazy_imports():
-    global yt_dlp, supabase, Client, pytube
-    if yt_dlp is None:
-        try:
-            import yt_dlp as yt_dlp_module
-            yt_dlp = yt_dlp_module
-        except ImportError:
-            pass
-    if supabase is None:
-        try:
-            from supabase import create_client, Client as SupabaseClient
-            supabase = create_client
-            Client = SupabaseClient
-        except ImportError:
-            pass
-    if pytube is None:
-        try:
-            import pytube
-        except ImportError:
-            pass
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = None
+
+try:
+    import pytube
+except ImportError:
+    pytube = None
 
 # ===============================
-# Supabase database setup - Lazy initialization
+# Supabase database setup
 # ===============================
 SUPABASE_URL = os.environ.get('NEXT_PUBLIC_SUPABASE_URL', 'https://pgzgyhhldijveoykszhz.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnemd5aGhsZGlqdmVveWtzemh6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTg3NjYxMCwiZXhwIjoyMDkxNDUyNjEwfQ.N-extU8G4pnGiD_m3wiFR1f4LHav1Brq_k-bgv0LYF0')
@@ -45,17 +36,11 @@ supabase_client = None
 
 def get_supabase():
     global supabase_client
-    if supabase_client is None:
-        lazy_imports()
-        if supabase is not None:
-            try:
-                print(f"Connecting to Supabase: {SUPABASE_URL[:30]}...")
-                supabase_client = supabase(SUPABASE_URL, SUPABASE_KEY)
-                print("Supabase client created successfully")
-            except Exception as e:
-                print(f"Supabase init error: {type(e).__name__}: {e}")
-        else:
-            print("Supabase module not loaded")
+    if supabase_client is None and create_client:
+        try:
+            supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        except Exception as e:
+            print(f"Supabase init error: {e}")
     return supabase_client
 
 # ===============================
@@ -87,8 +72,6 @@ def open_browser():
 # Helper functions
 # ===============================
 def search_youtube(query):
-    # Lazy import yt_dlp
-    lazy_imports()
     if yt_dlp is None:
         return []
     
