@@ -60,7 +60,15 @@ app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
-# Note: Supabase is lazily initialized when needed
+# Debug endpoint
+@app.route('/api/debug')
+def debug():
+    return jsonify({
+        'supabase_url': SUPABASE_URL[:30] + '...',
+        'supabase_key_set': bool(SUPABASE_KEY),
+        'create_client_exists': create_client is not None,
+        'supabase_client_exists': supabase_client is not None
+    })
 
 # ===============================
 # Auto-open browser
