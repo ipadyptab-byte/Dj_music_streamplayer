@@ -24,20 +24,10 @@ def init_supabase():
     global supabase
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Create settings table if not exists (ignore errors - table may already exist)
-        try:
-            supabase.postgrest.execute_sql('''
-                CREATE TABLE IF NOT EXISTS settings (
-                    id SERIAL PRIMARY KEY,
-                    key TEXT UNIQUE NOT NULL,
-                    value JSONB,
-                    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-            ''')
-        except Exception as e:
-            print(f"Table creation note: {e}")
+        # Note: Settings table already exists in Supabase, no need to create it
     except Exception as e:
         print(f"Supabase init error: {e}")
+        supabase = None
 
 # ===============================
 # PyInstaller-safe base directory
