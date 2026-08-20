@@ -383,7 +383,6 @@ def get_tracks():
             return jsonify({'error': 'Database not connected'}), 500
         result = db.table('settings').select('key, value').like('key', 'track_%').execute()
         tracks = {}
-        import json
         for row in result.data:
             value = row['value']
             if isinstance(value, str):
@@ -406,7 +405,6 @@ def get_track(track_type):
         key = f'track_{track_type}'
         result = db.table('settings').select('value').eq('key', key).execute()
         if result.data and len(result.data) > 0:
-            import json
             value = result.data[0]['value']
             # Parse if it's a JSON string
             if isinstance(value, str):
@@ -428,8 +426,7 @@ def save_track(track_type):
             return jsonify({'error': 'Database not connected. Please check Supabase configuration.'}), 500
         track_data = request.json
         key = f'track_{track_type}'
-        # Convert to JSON string for storage
-        import json
+        # Store as JSON string
         value_json = json.dumps(track_data)
         db.table('settings').upsert({'key': key, 'value': value_json}, on_conflict='key').execute()
         return jsonify({'success': True})
