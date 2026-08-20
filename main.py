@@ -1,19 +1,39 @@
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.utils import secure_filename
-import yt_dlp
 import os
 import sys
-from supabase import create_client, Client
 
 # Only import these for local development
 if os.environ.get('VERCEL') != '1':
     import webbrowser
     from threading import Timer
 
-try:
-    import pytube
-except ImportError:
-    pytube = None
+# Lazy imports for serverless compatibility
+yt_dlp = None
+supabase = None
+Client = None
+pytube = None
+
+def lazy_imports():
+    global yt_dlp, supabase, Client, pytube
+    if yt_dlp is None:
+        try:
+            import yt_dlp as yt_dlp_module
+            yt_dlp = yt_dlp_module
+        except ImportError:
+            pass
+    if supabase is None:
+        try:
+            from supabase import create_client, Client as SupabaseClient
+            supabase = create_client
+            Client = SupabaseClient
+        except ImportError:
+            pass
+    if pytube is None:
+        try:
+            import pytube
+        except ImportError:
+            pass
 
 # ===============================
 # Supabase database setup - Lazy initialization
@@ -21,16 +41,18 @@ except ImportError:
 SUPABASE_URL = os.environ.get('NEXT_PUBLIC_SUPABASE_URL', 'https://pgzgyhhldijveoykszhz.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnemd5aGhsZGlqdmVveWtzemh6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTg3NjYxMCwiZXhwIjoyMDkxNDUyNjEwfQ.N-extU8G4pnGiD_m3wiFR1f4LHav1Brq_k-bgv0LYF0')
 
-supabase: Client = None
+supabase_client = None
 
 def get_supabase():
-    global supabase
-    if supabase is None:
-        try:
-            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        except Exception as e:
-            print(f"Supabase init error: {e}")
-    return supabase
+    global supabase_client
+    if supabase_client is None:
+        lazy_imports()
+        if supabase is not None:
+            try:
+                supabase_client = supabase(SUPABASE_URL, SUPABASE_KEY)
+            except Exception as e:
+                print(f"Supabase init error: {e}")
+    return supabase_client
 
 # ===============================
 # PyInstaller-safe base directory
@@ -61,6 +83,11 @@ def open_browser():
 # Helper functions
 # ===============================
 def search_youtube(query):
+    # Lazy import yt_dlp
+    lazy_imports()
+    if yt_dlp is None:
+        return []
+    
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
