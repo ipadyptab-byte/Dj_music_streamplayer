@@ -16,21 +16,21 @@ except ImportError:
     pytube = None
 
 # ===============================
-# Supabase database setup
+# Supabase database setup - Lazy initialization
 # ===============================
 SUPABASE_URL = os.environ.get('NEXT_PUBLIC_SUPABASE_URL', 'https://pgzgyhhldijveoykszhz.supabase.co')
 SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBnemd5aGhsZGlqdmVveWtzemh6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTg3NjYxMCwiZXhwIjoyMDkxNDUyNjEwfQ.N-extU8G4pnGiD_m3wiFR1f4LHav1Brq_k-bgv0LYF0')
 
 supabase: Client = None
 
-def init_supabase():
+def get_supabase():
     global supabase
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Note: Settings table already exists in Supabase, no need to create it
-    except Exception as e:
-        print(f"Supabase init error: {e}")
-        supabase = None
+    if supabase is None:
+        try:
+            supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        except Exception as e:
+            print(f"Supabase init error: {e}")
+    return supabase
 
 # ===============================
 # PyInstaller-safe base directory
@@ -49,8 +49,7 @@ app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 
-# Initialize Supabase
-init_supabase()
+# Note: Supabase is lazily initialized when needed
 
 # ===============================
 # Auto-open browser
@@ -305,10 +304,11 @@ def delete_file():
 @app.route('/api/settings/<key>', methods=['GET'])
 def get_setting(key):
     """Get setting from database"""
-    if not supabase:
+    db = get_supabase()
+    if not db:
         return jsonify({'error': 'Database not connected'}), 500
     try:
-        result = supabase.table('settings').select('value').eq('key', key).execute()
+        result = db.table('settings').select('value').eq('key', key).execute()
         if result.data and len(result.data) > 0:
             return jsonify(result.data[0]['value'])
         return jsonify(None)
@@ -318,11 +318,12 @@ def get_setting(key):
 @app.route('/api/settings/<key>', methods=['POST'])
 def save_setting(key):
     """Save setting to database"""
-    if not supabase:
+    db = get_supabase()
+    if not db:
         return jsonify({'error': 'Database not connected'}), 500
     try:
         value = request.json
-        supabase.table('settings').upsert({'key': key, 'value': value}, on_conflict='key').execute()
+        db.table('settings').upsert({'key': key, 'value': value}, on_conflict='key').execute()
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -330,10 +331,11 @@ def save_setting(key):
 @app.route('/api/settings/<key>', methods=['DELETE'])
 def delete_setting(key):
     """Delete setting from database"""
-    if not supabase:
+    db = get_supabase()
+    if not db:
         return jsonify({'error': 'Database not connected'}), 500
     try:
-        supabase.table('settings').delete().eq('key', key).execute()
+        db.table('settings').delete().eq('key', key).execute()
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
