@@ -34,21 +34,21 @@ SUPABASE_KEY = os.environ.get('SUPABASE_SECRET_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cC
 
 supabase_client = None
 
+last_error = None
+
 def get_supabase():
-    global supabase_client
+    global supabase_client, last_error
     if supabase_client is None:
         if not create_client:
-            print("ERROR: create_client is None - supabase package not installed")
+            last_error = "supabase package not installed"
             return None
         if not SUPABASE_URL or not SUPABASE_KEY:
-            print("ERROR: SUPABASE_URL or SUPABASE_KEY not set")
+            last_error = "SUPABASE_URL or SUPABASE_KEY not set"
             return None
         try:
-            print(f"Creating supabase client for {SUPABASE_URL[:20]}...")
             supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-            print("Supabase client created successfully")
         except Exception as e:
-            print(f"Supabase init error: {type(e).__name__}: {e}")
+            last_error = f"{type(e).__name__}: {e}"
             return None
     return supabase_client
 
@@ -72,11 +72,13 @@ app.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1GB
 # Debug endpoint
 @app.route('/api/debug')
 def debug():
+    get_supabase()  # Try to initialize
     return jsonify({
-        'supabase_url': SUPABASE_URL[:30] + '...',
+        'supabase_url': SUPABASE_URL[:30] + '...' if SUPABASE_URL else 'NOT SET',
         'supabase_key_set': bool(SUPABASE_KEY),
         'create_client_exists': create_client is not None,
-        'supabase_client_exists': supabase_client is not None
+        'supabase_client_exists': supabase_client is not None,
+        'last_error': last_error
     })
 
 # ===============================
