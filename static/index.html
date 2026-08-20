@@ -665,7 +665,7 @@
                     advtTrack = results[0];
                     document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
                     // Save to database instead of localStorage
-                    await fetch('/api/settings/advt', {
+                    await fetch('/api/tracks/advt', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({track: advtTrack})
@@ -686,7 +686,7 @@
                     prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
                     document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
                     // Save to database instead of localStorage
-                    await fetch('/api/settings/prayer', {
+                    await fetch('/api/tracks/prayer', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({track: prayerTrack, times: prayerTimes})
@@ -1002,7 +1002,7 @@
                 startAdvtTimer();
                 // Save enabled state
                 if (advtTrack) {
-                    fetch('/api/settings/advt', {
+                    fetch('/api/tracks/advt', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -1017,7 +1017,7 @@
                 startPrayerChecker();
                 // Save enabled state
                 if (prayerTrack) {
-                    fetch('/api/settings/prayer', {
+                    fetch('/api/tracks/prayer', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -1031,7 +1031,7 @@
             // Also save interval when changed
             document.getElementById('advt-interval').addEventListener('change', function() {
                 if (advtTrack) {
-                    fetch('/api/settings/advt', {
+                    fetch('/api/tracks/advt', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -1045,7 +1045,7 @@
             document.getElementById('prayer-times').addEventListener('change', function() {
                 prayerTimes = this.value.split(',').map(t => t.trim());
                 if (prayerTrack) {
-                    fetch('/api/settings/prayer', {
+                    fetch('/api/tracks/prayer', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
