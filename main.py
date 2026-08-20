@@ -17,7 +17,8 @@ except ImportError:
 
 try:
     from supabase import create_client, Client
-except ImportError:
+except Exception as e:
+    print(f"Supabase import error: {e}")
     create_client = None
     Client = None
 
@@ -38,6 +39,7 @@ last_error = None
 
 def get_supabase():
     global supabase_client, last_error
+    print(f"get_supabase called, create_client={create_client}, SUPABASE_URL set={bool(SUPABASE_URL)}, SUPABASE_KEY set={bool(SUPABASE_KEY)}")
     if supabase_client is None:
         if not create_client:
             last_error = "supabase package not installed"
