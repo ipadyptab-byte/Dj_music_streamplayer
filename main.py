@@ -3,9 +3,12 @@ from werkzeug.utils import secure_filename
 import yt_dlp
 import os
 import sys
-import webbrowser
-from threading import Timer
 from supabase import create_client, Client
+
+# Only import these for local development
+if os.environ.get('VERCEL') != '1':
+    import webbrowser
+    from threading import Timer
 
 try:
     import pytube
@@ -343,6 +346,7 @@ if __name__ == '__main__':
     # Don't auto-open browser in production-like environments
     import os
     if os.environ.get('VERCEL') != '1':
+        from threading import Timer
         Timer(1, open_browser).start()
     app.run(host='127.0.0.1', port=5000)
 
