@@ -921,20 +921,26 @@
             try {
                 // Load advt track from database
                 const advtRes = await fetch('/api/tracks/advt');
-                const advtData = await advtRes.json();
-                if (advtData && advtData.title) {
-                    advtTrack = advtData;
-                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                if (advtRes.ok) {
+                    const advtData = await advtRes.json();
+                    if (advtData && advtData.title) {
+                        advtTrack = advtData;
+                        document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                        console.log('Loaded advt track:', advtTrack);
+                    }
                 }
                 // Load prayer track from database
                 const prayerRes = await fetch('/api/tracks/prayer');
-                const prayerData = await prayerRes.json();
-                if (prayerData && prayerData.track) {
-                    prayerTrack = prayerData.track;
-                    prayerTimes = prayerData.times || [];
-                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-                    if (prayerTimes.length > 0) {
-                        document.getElementById('prayer-times').value = prayerTimes.join(',');
+                if (prayerRes.ok) {
+                    const prayerData = await prayerRes.json();
+                    if (prayerData && prayerData.title) {
+                        prayerTrack = prayerData;
+                        prayerTimes = prayerData.times || [];
+                        document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                        if (prayerTimes.length > 0) {
+                            document.getElementById('prayer-times').value = prayerTimes.join(',');
+                        }
+                        console.log('Loaded prayer track:', prayerTrack);
                     }
                 }
             } catch(e) {
