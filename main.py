@@ -36,11 +36,20 @@ supabase_client = None
 
 def get_supabase():
     global supabase_client
-    if supabase_client is None and create_client:
+    if supabase_client is None:
+        if not create_client:
+            print("ERROR: create_client is None - supabase package not installed")
+            return None
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            print("ERROR: SUPABASE_URL or SUPABASE_KEY not set")
+            return None
         try:
+            print(f"Creating supabase client for {SUPABASE_URL[:20]}...")
             supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+            print("Supabase client created successfully")
         except Exception as e:
-            print(f"Supabase init error: {e}")
+            print(f"Supabase init error: {type(e).__name__}: {e}")
+            return None
     return supabase_client
 
 # ===============================
