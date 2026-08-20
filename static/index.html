@@ -705,11 +705,17 @@
             document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
             // Save to database
             try {
-                await fetch('/api/tracks/advt', {
+                const res = await fetch('/api/tracks/advt', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(advtTrack)
                 });
+                const data = await res.json();
+                console.log('Save advt response:', res.status, data);
+                if (!res.ok) {
+                    alert('Error saving: ' + JSON.stringify(data));
+                    return;
+                }
             } catch(e) { console.error('Failed to save advt track:', e); }
             alert('Advt track loaded!');
             // Restart timer if enabled
