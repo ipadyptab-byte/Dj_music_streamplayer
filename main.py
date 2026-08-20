@@ -403,7 +403,7 @@ def get_track(track_type):
     try:
         db = get_supabase()
         if not db:
-            return jsonify({'error': 'Database not connected'}), 500
+            return jsonify({'error': 'Database not connected', 'debug': last_error}), 500
         key = f'track_{track_type}'
         result = db.table('settings').select('value').eq('key', key).execute()
         if result.data and len(result.data) > 0:
@@ -425,7 +425,7 @@ def save_track(track_type):
     try:
         db = get_supabase()
         if not db:
-            return jsonify({'error': 'Database not connected. Please check Supabase configuration.'}), 500
+            return jsonify({'error': 'Database not connected. Please check Supabase configuration.', 'debug': last_error}), 500
         track_data = request.json
         key = f'track_{track_type}'
         # Store as JSON string
