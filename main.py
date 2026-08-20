@@ -296,7 +296,16 @@ def api_uploaded_file(filename):
 def list_files():
     files = os.listdir(app.config['UPLOAD_FOLDER'])
     return jsonify([{'title': f, 'url': f'/api/uploads/{f}'} for f in files])
+
 @app.route('/api/delete', methods=['POST'])
+def delete_file():
+    filename = secure_filename(request.json.get('filename', ''))
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return jsonify({'success': True})
+    return jsonify({'error': 'File not found'}), 404
+
 # ===============================
 # Settings API (Supabase database)
 # ===============================
@@ -336,14 +345,6 @@ def delete_setting(key):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/delete', methods=['POST'])
-def delete_file():
-    filename = secure_filename(request.json.get('filename', ''))
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        return jsonify({'success': True})
-    return jsonify({'error': 'File not found'}), 404
 # ===============================
 # App start
 # ===============================
