@@ -49,9 +49,13 @@ def get_supabase():
         lazy_imports()
         if supabase is not None:
             try:
+                print(f"Connecting to Supabase: {SUPABASE_URL[:30]}...")
                 supabase_client = supabase(SUPABASE_URL, SUPABASE_KEY)
+                print("Supabase client created successfully")
             except Exception as e:
-                print(f"Supabase init error: {e}")
+                print(f"Supabase init error: {type(e).__name__}: {e}")
+        else:
+            print("Supabase module not loaded")
     return supabase_client
 
 # ===============================
@@ -373,14 +377,21 @@ def delete_setting(key):
 @app.route('/api/tracks', methods=['GET'])
 def get_tracks():
     """Get all saved tracks from database"""
-    db = get_supabase()
-    if not db:
-        return jsonify({'error': 'Database not connected'}), 500
     try:
+        db = get_supabase()
+        if not db:
+            return jsonify({'error': 'Database not connected'}), 500
         result = db.table('settings').select('key, value').like('key', 'track_%').execute()
         tracks = {}
+        import json
         for row in result.data:
-            tracks[row['key']] = row['value']
+            value = row['value']
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except:
+                    pass
+            tracks[row['key']] = value
         return jsonify(tracks)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -388,14 +399,22 @@ def get_tracks():
 @app.route('/api/tracks/<track_type>', methods=['GET'])
 def get_track(track_type):
     """Get a specific track (advt or prayer)"""
-    db = get_supabase()
-    if not db:
-        return jsonify({'error': 'Database not connected'}), 500
     try:
+        db = get_supabase()
+        if not db:
+            return jsonify({'error': 'Database not connected'}), 500
         key = f'track_{track_type}'
         result = db.table('settings').select('value').eq('key', key).execute()
         if result.data and len(result.data) > 0:
-            return jsonify(result.data[0]['value'])
+            import json
+            value = result.data[0]['value']
+            # Parse if it's a JSON string
+            if isinstance(value, str):
+                try:
+                    value = json.loads(value)
+                except:
+                    pass
+            return jsonify(value)
         return jsonify(None)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -403,13 +422,16 @@ def get_track(track_type):
 @app.route('/api/tracks/<track_type>', methods=['POST'])
 def save_track(track_type):
     """Save a track (advt or prayer) to database"""
-    db = get_supabase()
-    if not db:
-        return jsonify({'error': 'Database not connected'}), 500
     try:
+        db = get_supabase()
+        if not db:
+            return jsonify({'error': 'Database not connected. Please check Supabase configuration.'}), 500
         track_data = request.json
         key = f'track_{track_type}'
-        db.table('settings').upsert({'key': key, 'value': track_data}, on_conflict='key').execute()
+        # Convert to JSON string for storage
+        import json
+        value_json = json.dumps(track_data)
+        db.table('settings').upsert({'key': key, 'value': value_json}, on_conflict='key').execute()
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
