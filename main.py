@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 import yt_dlp
 import os
 import sys
 import webbrowser
+import mimetypes
 from threading import Timer
 from supabase import create_client, Client
 
@@ -291,7 +292,21 @@ def api_upload_file():
     return jsonify({'url': f'/api/uploads/{filename}', 'title': filename})
 @app.route('/api/uploads/<filename>')
 def api_uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # Determine MIME type based on file extension
+    mimetype, _ = mimetypes.guess_type(filename)
+    # Default to audio/mpeg for mp3 files if guessing fails
+    if not mimetype:
+        if filename.lower().endswith('.mp3'):
+            mimetype = 'audio/mpeg'
+        elif filename.lower().endswith('.wav'):
+            mimetype = 'audio/wav'
+        elif filename.lower().endswith('.ogg'):
+            mimetype = 'audio/ogg'
+        elif filename.lower().endswith('.m4a'):
+            mimetype = 'audio/mp4'
+        else:
+            mimetype = 'application/octet-stream'
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename, mimetype=mimetype)
 @app.route('/api/files')
 def list_files():
     files = os.listdir(app.config['UPLOAD_FOLDER'])
