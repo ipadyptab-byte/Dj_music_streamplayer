@@ -592,6 +592,17 @@
                             }
                         }
                         isYouTubePlaying = true;
+                    } else {
+                        // Handle non-YouTube URLs (local files, etc.) using HTML5 audio player
+                        player.src = data.url;
+                        player.style.display = 'block';
+                        // Hide YouTube container if present
+                        const ytContainer = document.getElementById('youtube-container');
+                        if (ytContainer) ytContainer.style.display = 'none';
+                        const iframe = document.getElementById('youtube-iframe');
+                        if (iframe) iframe.src = '';
+                        isYouTubePlaying = false;
+                        player.play().catch(e => console.error('Play error:', e));
                     }
                     
                     // Track which track is playing
