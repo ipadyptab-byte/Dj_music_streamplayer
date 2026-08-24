@@ -513,7 +513,7 @@
             const isPlayingAdvt = (track === advtTrack);
             const isPlayingPrayer = (track === prayerTrack);
             
-            // Handle Blob URLs (local files)
+            // Handle Blob URLs (local files) - temporary session URLs
             if (track.isBlob || track.url.startsWith('blob:')) {
                 player.src = track.url;
                 player.style.display = 'block';
@@ -532,6 +532,43 @@
                     console.log('Now playing prayer track!');
                 } else {
                     // This is the MAIN track - save for resume after advt/prayer
+                    inPrayer = false;
+                    isAdvtPlaying = false;
+                    mainTrackInfo = {...track};
+                    if (isYouTubePlaying && window.ytPlayer) {
+                        mainPausedTime = window.ytPlayer.getCurrentTime() || 0;
+                    } else {
+                        mainPausedTime = player.currentTime || 0;
+                    }
+                    console.log('Main track saved for resume: ' + track.title);
+                }
+                
+                document.getElementById('current-track').innerText = 'Playing: ' + track.title;
+                return;
+            }
+            
+            // Handle local file URLs (/api/uploads/...) - play directly without API call
+            if (track.url.startsWith('/api/uploads/') || track.url.startsWith('/uploads/')) {
+                player.src = track.url;
+                player.style.display = 'block';
+                // Hide YouTube container if present
+                const ytContainer = document.getElementById('youtube-container');
+                if (ytContainer) ytContainer.style.display = 'none';
+                const iframe = document.getElementById('youtube-iframe');
+                if (iframe) iframe.src = '';
+                isYouTubePlaying = false;
+                player.play().catch(e => console.error('Play error:', e));
+                
+                // Track which track is playing
+                if (isPlayingAdvt) {
+                    isAdvtPlaying = true;
+                    inPrayer = false;
+                    console.log('Now playing advt track (local)!');
+                } else if (isPlayingPrayer) {
+                    inPrayer = true;
+                    isAdvtPlaying = false;
+                    console.log('Now playing prayer track (local)!');
+                } else {
                     inPrayer = false;
                     isAdvtPlaying = false;
                     mainTrackInfo = {...track};
@@ -706,42 +743,72 @@
             } catch(e) { console.error(e); }
         }
         
-        // Upload advt file - Blob URL (valid for current session only!)
+        // Upload advt file - actually upload to server
         async function uploadAdvtFile() {
             const fileInput = document.getElementById('advt-file');
             if (!fileInput.files.length) return;
             const file = fileInput.files[0];
-            const url = URL.createObjectURL(file);
-            advtTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
-            document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
-            // Save to database
-            fetch('/api/settings/advt', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({track: advtTrack})
-            });
-            alert('Advt track loaded!');
-            // Restart timer if enabled
-            startAdvtTimer();
+            // Upload to server first
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.url) {
+                    advtTrack = { title: data.title, url: data.url, platform: 'Local', isBlob: false };
+                    document.getElementById('advt-status').innerText = 'Advt: ' + advtTrack.title;
+                    // Save to database
+                    await fetch('/api/settings/advt', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({track: advtTrack})
+                    });
+                    alert('Advt track uploaded and saved!');
+                    // Restart timer if enabled
+                    startAdvtTimer();
+                } else {
+                    alert('Error uploading file: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                alert('Error uploading file: ' + e.message);
+            }
         }
         
-        // Upload prayer file - Blob URL (valid for current session only!)
+        // Upload prayer file - actually upload to server
         async function uploadPrayerFile() {
             const fileInput = document.getElementById('prayer-file');
             if (!fileInput.files.length) return;
             const file = fileInput.files[0];
-            const url = URL.createObjectURL(file);
-            prayerTrack = { title: file.name, url: url, platform: 'Local', isBlob: true };
-            prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
-            document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
-            // Save to database
-            fetch('/api/settings/prayer', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({track: prayerTrack, times: prayerTimes})
-            });
-            alert('Prayer track loaded!');
-            startPrayerChecker();
+            // Upload to server first
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (data.url) {
+                    prayerTrack = { title: data.title, url: data.url, platform: 'Local', isBlob: false };
+                    prayerTimes = document.getElementById('prayer-times').value.split(',').map(t => t.trim());
+                    document.getElementById('prayer-status').innerText = 'Prayer: ' + prayerTrack.title + ' at ' + prayerTimes.join(', ');
+                    // Save to database
+                    await fetch('/api/settings/prayer', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({track: prayerTrack, times: prayerTimes})
+                    });
+                    alert('Prayer track uploaded and saved!');
+                    startPrayerChecker();
+                } else {
+                    alert('Error uploading file: ' + (data.error || 'Unknown error'));
+                }
+            } catch(e) {
+                alert('Error uploading file: ' + e.message);
+            }
         }
         
         // Play/Pause/Delete advt
