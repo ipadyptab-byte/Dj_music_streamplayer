@@ -1,0 +1,28 @@
+version: '3.8'
+
+# =================================================================
+# Synology NAS (DSM 7 Container Manager / Docker) Compose File
+# DJ Music Streamplayer with MariaDB 10 Integration
+# =================================================================
+
+services:
+  djmusic-player:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: djmusic-player
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Your Synology NAS MariaDB 10 Connection URL:
+      - DATABASE_URL=mysql://root:Priyanka1981@@192.168.1.43:3307/djmusic
+    volumes:
+      # Persistent audio tracks & storage folders on your Synology NAS
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+    # Allow container to communicate directly with Synology host services (MariaDB 10 on 3307)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

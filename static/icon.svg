@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <radialGradient id="pearl-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fae18c" />
+      <stop offset="40%" stop-color="#dfad4b" />
+      <stop offset="100%" stop-color="#9a6e1e" />
+    </radialGradient>
+    <radialGradient id="ruby-dot-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ff445c" />
+      <stop offset="60%" stop-color="#cc1832" />
+      <stop offset="100%" stop-color="#7a0c1b" />
+    </radialGradient>
+  </defs>
+
+  <!-- Background Maroon Red Canvas -->
+  <rect width="512" height="512" fill="#ab1936" />
+
+  <!-- White Card Frame with Double Outer/Inner Border -->
+  <rect x="86" y="46" width="324" height="414" fill="#ffffff" />
+  <rect x="114" y="86" width="268" height="336" fill="none" stroke="#1c1917" stroke-width="4.5" />
+
+  <!-- Registered Trademark (R) in White Circle at Top Right -->
+  <g transform="translate(442, 76)">
+    <circle cx="0" cy="0" r="24" fill="none" stroke="#ffffff" stroke-width="4" />
+    <text x="0" y="8" font-family="'Inter', 'Arial', sans-serif" font-size="24" font-weight="700" fill="#ffffff" text-anchor="middle">R</text>
+  </g>
+
+  <!-- Stylized "dj" Monogram Emblem (Deep Crimson Red #911b2b) -->
+  <g id="dj-monogram">
+    <!-- Main d-loop and stem combined path -->
+    <!-- d outer circle: cx=226, cy=282, r=64; inner circle: cx=226, cy=282, r=36 -->
+    <!-- stem of j: extends up to y=110 and curves to dot -->
+    <path d="
+      M 248 114
+      C 244 114 238 120 238 132
+      L 238 238
+      C 220 220 196 214 172 222
+      C 134 234 112 272 116 312
+      C 120 354 154 386 198 386
+      C 246 386 288 350 298 298
+      C 304 266 296 200 296 160
+      C 296 142 290 128 278 120
+      C 268 114 256 114 248 114 Z
+
+      M 218 248
+      C 244 248 266 270 266 296
+      C 266 322 244 344 218 344
+      C 192 344 170 322 170 296
+      C 170 270 192 248 218 248 Z
+    " fill="#8f192b" fill-rule="evenodd" />
+
+    <!-- Swoosh tail curving under 'd' -->
+    <path d="
+      M 168 356
+      C 214 394 274 382 308 322
+      C 302 334 290 352 270 366
+      C 236 390 192 384 168 356 Z
+    " fill="#8f192b" />
+
+    <!-- Red Ruby Pearl Dot above 'j' -->
+    <circle cx="288" cy="142" r="17" fill="url(#ruby-dot-grad)" />
+
+    <!-- Golden Pearls Necklace Strands trailing down from 'j' -->
+    <circle cx="338" cy="270" r="9" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="336" cy="292" r="9.5" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="330" cy="314" r="10" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="320" cy="336" r="10.5" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="306" cy="356" r="11" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="288" cy="374" r="11.5" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="266" cy="388" r="11.5" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+
+    <!-- Pendant Pearl Cluster at bottom of necklace -->
+    <circle cx="334" cy="368" r="11" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="330" cy="392" r="10" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    <circle cx="348" cy="382" r="8.5" fill="url(#pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+  </g>
+</svg>

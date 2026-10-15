@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+
+    function isValidTrack(data) {
+      return data.id is string && data.id.size() <= 128 &&
+             data.title is string && data.title.size() <= 512 &&
+             data.category is string && data.category.size() <= 32;
+    }
+
+    function isValidSettings(data) {
+      return data.id is string && data.id.size() <= 128;
+    }
+
+    match /audio_tracks/{trackId} {
+      allow read: if true;
+      allow create, update: if isValidId(trackId) && isValidTrack(request.resource.data);
+      allow delete: if isValidId(trackId);
+
+      match /chunks/{chunkId} {
+        allow read: if true;
+        allow create, update, delete: if isValidId(trackId) && isValidId(chunkId);
+      }
+    }
+
+    match /player_settings/{settingId} {
+      allow read: if true;
+      allow create, update: if isValidId(settingId) && isValidSettings(request.resource.data);
+      allow delete: if isValidId(settingId);
+    }
+  }
+}

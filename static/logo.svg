@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="100%" height="100%">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Rozha+One&amp;family=Yantramanav:wght@700;900&amp;family=Tiro+Devanagari+Marathi:ital@0;1&amp;family=Cinzel:wght@600;700&amp;display=swap');
+      
+      .brand-title {
+        font-family: 'Rozha One', 'Yantramanav', 'Noto Sans Devanagari', 'Mangal', 'Arial Unicode MS', sans-serif;
+        font-weight: 900;
+        font-size: 136px;
+        fill: #ffffff;
+        letter-spacing: 2px;
+      }
+      .brand-sub {
+        font-family: 'Cinzel', 'Inter', 'Arial', sans-serif;
+        font-weight: 700;
+        font-size: 30px;
+        fill: #ffffff;
+        letter-spacing: 4px;
+      }
+      .brand-slogan {
+        font-family: 'Tiro Devanagari Marathi', 'Rozha One', 'Mangal', serif;
+        font-size: 46px;
+        font-weight: 600;
+        fill: #27272a;
+        letter-spacing: 1.5px;
+      }
+    </style>
+    <radialGradient id="logo-pearl-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fae18c" />
+      <stop offset="40%" stop-color="#dfad4b" />
+      <stop offset="100%" stop-color="#9a6e1e" />
+    </radialGradient>
+    <radialGradient id="logo-ruby-grad" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ff445c" />
+      <stop offset="60%" stop-color="#cc1832" />
+      <stop offset="100%" stop-color="#7a0c1b" />
+    </radialGradient>
+    <filter id="logo-shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
+  </defs>
+
+  <!-- Main Ruby Red Top Banner -->
+  <rect x="0" y="0" width="1000" height="235" fill="#ab1936" rx="4" />
+
+  <!-- Registered Trademark top right of banner -->
+  <g transform="translate(974, 34)">
+    <circle cx="0" cy="0" r="14" fill="none" stroke="#ffffff" stroke-width="2.5" />
+    <text x="0" y="5" font-family="'Inter', 'Arial', sans-serif" font-size="14" font-weight="700" fill="#ffffff" text-anchor="middle">R</text>
+  </g>
+
+  <!-- Left Logo Square Icon Box -->
+  <g transform="translate(42, 22)">
+    <!-- White Card Box -->
+    <rect x="0" y="0" width="156" height="190" fill="#ffffff" rx="2" />
+    <!-- Inner Black Border -->
+    <rect x="14" y="18" width="128" height="154" fill="none" stroke="#1c1917" stroke-width="3" />
+    
+    <!-- (R) on top right of white box -->
+    <g transform="translate(170, 14)">
+      <circle cx="0" cy="0" r="11" fill="none" stroke="#ffffff" stroke-width="2" />
+      <text x="0" y="4" font-family="'Inter', 'Arial', sans-serif" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">R</text>
+    </g>
+
+    <!-- DJ Monogram inside box -->
+    <g transform="translate(-18, -12) scale(0.48)">
+      <path d="
+        M 248 114
+        C 244 114 238 120 238 132
+        L 238 238
+        C 220 220 196 214 172 222
+        C 134 234 112 272 116 312
+        C 120 354 154 386 198 386
+        C 246 386 288 350 298 298
+        C 304 266 296 200 296 160
+        C 296 142 290 128 278 120
+        C 268 114 256 114 248 114 Z
+
+        M 218 248
+        C 244 248 266 270 266 296
+        C 266 322 244 344 218 344
+        C 192 344 170 322 170 296
+        C 170 270 192 248 218 248 Z
+      " fill="#8f192b" fill-rule="evenodd" />
+
+      <path d="
+        M 168 356
+        C 214 394 274 382 308 322
+        C 302 334 290 352 270 366
+        C 236 390 192 384 168 356 Z
+      " fill="#8f192b" />
+
+      <!-- Red Ruby Dot -->
+      <circle cx="288" cy="142" r="17" fill="url(#logo-ruby-grad)" />
+
+      <!-- Pearls -->
+      <circle cx="338" cy="270" r="9" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="336" cy="292" r="9.5" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="330" cy="314" r="10" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="320" cy="336" r="10.5" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="306" cy="356" r="11" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="288" cy="374" r="11.5" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="266" cy="388" r="11.5" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      
+      <!-- Cluster -->
+      <circle cx="334" cy="368" r="11" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="330" cy="392" r="10" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+      <circle cx="348" cy="382" r="8.5" fill="url(#logo-pearl-grad)" stroke="#875e14" stroke-width="0.8" />
+    </g>
+  </g>
+
+  <!-- Large "देवी ज्वेलर्स" Text Heading in White -->
+  <!-- Vector Devanagari text rendered with SVG text -->
+  <text x="590" y="162" class="brand-title" text-anchor="middle">देवी ज्वेलर्स</text>
+
+  <!-- Middle Purple/Magenta Horizontal Bar (GOLD | SILVER | DIAMONDS | PEARLS) -->
+  <rect x="0" y="248" width="1000" height="72" fill="#891a61" />
+  
+  <text x="500" y="295" class="brand-sub" text-anchor="middle">
+    |  GOLD  |  SILVER  |  DIAMONDS  |  PEARLS  |
+  </text>
+
+  <!-- Bottom Slogan in White / Golden / Light Theme -->
+  <!-- "अनमोल क्षणांचे सोनेरी साक्षीदार" -->
+  <rect x="0" y="328" width="1000" height="84" fill="#ffffff" rx="4" opacity="0.96" />
+  <text x="500" y="388" class="brand-slogan" text-anchor="middle">
+    अनमोल क्षणांचे सोनेरी साक्षीदार
+  </text>
+</svg>

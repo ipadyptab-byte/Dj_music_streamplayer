@@ -1,0 +1,6 @@
+{
+  "name": "DJ Music Streamplayer",
+  "description": "A web-based music search and streaming player with scheduled advertisement and prayer tracks",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

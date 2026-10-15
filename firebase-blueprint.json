@@ -1,0 +1,49 @@
+{
+  "entities": {
+    "Track": {
+      "title": "Track",
+      "description": "An advertisement or prayer audio track shared across devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 256 },
+        "url": { "type": "string", "maxLength": 1024 },
+        "category": { "type": "string", "maxLength": 32 },
+        "size": { "type": "number" },
+        "order": { "type": "number" },
+        "audioBase64": { "type": "string", "maxLength": 800000 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "url", "category"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Synchronized player settings for advertisement sequence and scheduled prayer tracks across devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "track": { "type": "object" },
+        "advtTrack": { "type": "object" },
+        "prayerTrack": { "type": "object" },
+        "advtTracks": { "type": "array" },
+        "prayerTimes": { "type": "array" },
+        "advtEnabled": { "type": "boolean" },
+        "prayerEnabled": { "type": "boolean" },
+        "advtInterval": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/audio_tracks/{trackId}": {
+      "schema": "Track",
+      "description": "Uploaded advertisement and prayer tracks synchronized across devices"
+    },
+    "/player_settings/{settingId}": {
+      "schema": "Settings",
+      "description": "Shared player configuration including synchronized advt and prayer settings"
+    }
+  }
+}
